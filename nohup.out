@@ -1,0 +1,13 @@
+[I 15:41:02.368 NotebookApp] The port 8889 is already in use, trying another port.
+[I 15:41:02.426 NotebookApp] JupyterLab extension loaded from /home/canalli/anaconda3/lib/python3.7/site-packages/jupyterlab
+[I 15:41:02.426 NotebookApp] JupyterLab application directory is /home/canalli/anaconda3/share/jupyter/lab
+[I 15:41:02.429 NotebookApp] Serving notebooks from local directory: /home/canalli/git/FairnessPlayground
+[I 15:41:02.429 NotebookApp] The Jupyter Notebook is running at:
+[I 15:41:02.429 NotebookApp] http://localhost:8890/?token=9c8f7d41be6533e6eb73e9cb76da2e8451ee4b2be78759a1
+[I 15:41:02.429 NotebookApp] Use Control-C to stop this server and shut down all kernels (twice to skip confirmation).
+[C 15:41:02.434 NotebookApp] 
+    
+    To access the notebook, open this file in a browser:
+        file:///run/user/1003/jupyter/nbserver-3634-open.html
+    Or copy and paste one of these URLs:
+        http://localhost:8890/?token=9c8f7d41be6533e6eb73e9cb76da2e8451ee4b2be78759a1
