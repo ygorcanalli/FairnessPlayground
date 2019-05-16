@@ -13,6 +13,8 @@ os.environ["CUDA_VISIBLE_DEVICES"]="0"
 # importing tf and keras
 import tensorflow as tf
 from tensorflow import keras
+from keras.utils import to_categorical
+from keras.backend import dot, transpose, categorical_crossentropy
 
 #%% reading training and test data
 
@@ -28,18 +30,18 @@ target_class = [14]
 ct = ColumnTransformer([
     ("categorical_onehot", OneHotEncoder(handle_unknown='ignore'), categorical_features),
     ("numerical", MinMaxScaler(), numerical_features),
-    ("categorical_ordinal", OrdinalEncoder(), target_class)
+    ("categorical_onehot_target", OneHotEncoder(handle_unknown='ignore'), target_class)
     ])
 
 train = ct.fit_transform(train)
 test = ct.transform(test)
 
 #%% X, y splitting
-X_train = train[:,:-1]
-y_train = train[:,-1]
+X_train = train[:,:-2]
+y_train = train[:,-2:]
 
-X_test = test[:,:-1]
-y_test = test[:,-1]
+X_test = test[:,:-2]
+y_test = test[:,-2:]
 
 #%% specifying model
 model = keras.Sequential([
@@ -48,9 +50,26 @@ model = keras.Sequential([
     keras.layers.Dense(2, activation=tf.nn.softmax)
 ])
 
+#%% custom loss function for forward
+
+def forward_categorical_crossentropy(T):
+
+    # Create a loss function that adds the MSE loss to the mean of all squared activations of a specific layer
+    def loss(y_true,y_pred):
+        pred = transpose(dot(transpose(T), transpose(y_pred)))
+        return categorical_crossentropy(y_true, pred)
+   
+    # Return a function
+    return loss
+#%% non-sense transition matrix
+
+T = np.array([[0.4, 0.6],[0.65, 0.35]]).astype(np.float32)
+
+
 #%% specifying optmizer, loss and metrics
+
 model.compile(optimizer='adam', 
-              loss='sparse_categorical_crossentropy',
+              loss=forward_categorical_crossentropy(T),
               metrics=['accuracy'])
 
 #%% traning
@@ -61,16 +80,3 @@ test_loss, test_acc = model.evaluate(X_test, y_test)
 print('Test accuracy:', test_acc)
 #%% making prediction
 predictions = model.predict(X_test)
-
-#%% non-sense transition matrix
-
-T = np.array([[0.4, 0.6],[0.65, 0.35]])
-T_inv = np.linalg.inv(T)
-
-
-#%% doing forward
-
-forward_prediction = np.dot(T_inv, np.transpose(predictions))
-
-
-#%%
