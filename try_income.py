@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, MinMaxScaler
 from sklearn.compose import ColumnTransformer
+from pprint import pprint
 
 # default gpu to 0
 import os
@@ -116,13 +117,18 @@ test_loss, test_acc = evaluate(X_train, X_test, y_train, y_test,
                                 polluted_y_data=None, loss_function=categorical_crossentropy)
 print('Baseline test accuracy:', test_acc)
 
+baseline_result = test_acc
+
 #%% evaluating different error rates
 
 false_positive_rates = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
 false_negative_rates = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
 
-for fp in false_negative_rates:
-    for fn in false_negative_rates:
+without_forward_results = np.zeros(len(false_positive_rates), len(false_negative_rates))
+forward_results = np.zeros(len(false_positive_rates), len(false_negative_rates))
+
+for i, fp in enumerate(false_negative_rates):
+    for j, fn in enumerate(false_negative_rates):
         print("fp_rate: ", fp, " fn_rate: ", fn)
         T = np.array([[1-fp, fp],
                       [fn  , 1-fn]]).astype(np.float32)
@@ -135,8 +141,16 @@ for fp in false_negative_rates:
                                         polluted_y_data=polluted_labels,
                                         loss_function=categorical_crossentropy)
         print('Test accuracy without forward:', test_acc)
+        without_forward_results[i,j] = test_acc
         # polluted data with forward
         test_loss, test_acc = evaluate(X_train, X_test, y_train, y_test,
                                         polluted_y_data=polluted_labels,
                                         loss_function=forward_function)
         print('Test accuracy with forward:', test_acc)
+        forward_results[i,j] = test_acc
+
+print('Baseline test accuracy:', baseline_result)
+print("Results without forward:")
+pprint(without_forward_results)
+print("Results with forward:")
+pprint(forward_results)
