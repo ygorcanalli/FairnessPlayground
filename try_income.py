@@ -124,7 +124,7 @@ baseline_result = test_acc
 false_positive_rates = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
 false_negative_rates = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
 
-without_forward_results = np.zeros(len(false_positive_rates), len(false_negative_rates))
+without_forward_results = np.zeros( (len(false_positive_rates), len(false_negative_rates)) ) 
 forward_results = np.zeros( (len(false_positive_rates), len(false_negative_rates)) ) 
 
 for i, fp in enumerate(false_negative_rates):
