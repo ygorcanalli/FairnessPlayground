@@ -106,7 +106,7 @@ def evaluate(X_train, X_test, y_train, y_test,
         model.fit(X_train, y_train, epochs=traning_epochs)
     # disable data pollution
     else:
-        model.fit(X_train, polluted_y_train, epochs=traning_epochs)
+        model.fit(X_train, polluted_y_data, epochs=traning_epochs)
   
     # testing with non polluted data
     return model.evaluate(X_test, y_test)
