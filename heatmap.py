@@ -1,3 +1,4 @@
+#%%
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
@@ -36,29 +37,39 @@ with_forward = np.array([[0.83850169, 0.83297515, 0.83451027, 0.83236104, 0.8372
 
 #%%
 
-fig, ax = plt.subplots()
-im = ax.imshow(without_forward)
 
-# We want to show all ticks...
-ax.set_xticks(np.arange(len(fp_rate)))
-ax.set_yticks(np.arange(len(fn_rate)))
-# ... and label them with the respective list entries
-ax.set_xticklabels(fp_rate)
-ax.set_yticklabels(fn_rate)
+def plot_heatmap(data, title):
+        fig, ax = plt.subplots()
+        im = ax.imshow(without_forward,cmap=plt.cm.RdBu)
 
-ax.set_xlabel("False positive rate")
-ax.set_ylabel("False negative rate")
+        # We want to show all ticks...
+        ax.set_xticks(np.arange(len(fp_rate)))
+        ax.set_yticks(np.arange(len(fn_rate)))
+        # ... and label them with the respective list entries
+        ax.set_xticklabels(fp_rate)
+        ax.set_yticklabels(fn_rate)
 
-# Rotate the tick labels and set their alignment.
-plt.setp(ax.get_xticklabels(), ha="right",
-         rotation_mode="anchor")
+        ax.set_xlabel("False positive rate")
+        ax.set_ylabel("False negative rate")
 
-# Loop over data dimensions and create text annotations.
-for i in range(len(fp_rate)):
-    for j in range(len(fn_rate)):
-        text = ax.text(j, i, without_forward[i, j],
-                       ha="center", va="center", color="w")
+        # Rotate the tick labels and set their alignment.
+        plt.setp(ax.get_xticklabels(), ha="right",
+                rotation_mode="anchor")
 
-ax.set_title("Accuracy for pollution level")
-fig.tight_layout()
-plt.show()
+        # Loop over data dimensions and create text annotations.
+        for i in range(len(fp_rate)):
+                for j in range(len(fn_rate)):
+                        text = ax.text(j, i, "%.4f" % data[i, j] ,
+                                ha="center", va="center", color="black")
+
+                ax.set_title(title)
+        fig.tight_layout()
+        plt.show()
+
+#%%
+plot_heatmap(without_forward, "Accuracy for pollution level\n(without forward)")
+plot_heatmap(with_forward, "Accuracy for pollution level\n(with forward)")
+improvement = (1 - without_forward) - (1 - with_forward)/((1 - without_forward))
+plot_heatmap(improvement, "Improvement")
+
+#%%
