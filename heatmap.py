@@ -10,7 +10,7 @@ fp_rate = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
 fn_rate = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
 
 
-without_forward = np.array([[0.8335892 , 0.83143997, 0.82591343, 0.8038072 , 0.8038072 ,
+without_forward = 1 - np.array([[0.8335892 , 0.83143997, 0.82591343, 0.8038072 , 0.8038072 ,
         0.76481426],
        [0.83113295, 0.83573842, 0.8200798 , 0.82038689, 0.77126187,
         0.76082283],
@@ -22,7 +22,7 @@ without_forward = np.array([[0.8335892 , 0.83143997, 0.82591343, 0.8038072 , 0.8
         0.75683147],
        [0.46576604, 0.4009825 , 0.49554804, 0.61743939, 0.45716918,
         0.49831134]])
-with_forward = np.array([[0.83850169, 0.83297515, 0.83451027, 0.83236104, 0.83727354,
+with_forward = 1 - np.array([[0.83850169, 0.83297515, 0.83451027, 0.83236104, 0.83727354,
         0.83143997],
        [0.83850169, 0.83236104, 0.83481729, 0.8305189 , 0.82407123,
         0.82161498],
@@ -38,9 +38,11 @@ with_forward = np.array([[0.83850169, 0.83297515, 0.83451027, 0.83236104, 0.8372
 #%%
 
 
-def plot_heatmap(data, title):
+def plot_heatmap(data, title, color_map=plt.cm.Reds, vmin=None, vmax=None):
         fig, ax = plt.subplots()
-        im = ax.imshow(without_forward,cmap=plt.cm.RdBu)
+        im = ax.imshow(data,cmap=color_map)
+        if vmin is not None and vmax is not None:
+                im.set_clim(vmin, vmax)
 
         # We want to show all ticks...
         ax.set_xticks(np.arange(len(fp_rate)))
@@ -56,20 +58,24 @@ def plot_heatmap(data, title):
         plt.setp(ax.get_xticklabels(), ha="right",
                 rotation_mode="anchor")
 
+
         # Loop over data dimensions and create text annotations.
         for i in range(len(fp_rate)):
                 for j in range(len(fn_rate)):
-                        text = ax.text(j, i, "%.4f" % data[i, j] ,
+                        text = ax.text(j, i, "%.3f" % data[i, j] ,
                                 ha="center", va="center", color="black")
 
-                ax.set_title(title)
+        ax.set_title(title)
         fig.tight_layout()
         plt.show()
 
 #%%
-plot_heatmap(without_forward, "Accuracy for pollution level\n(without forward)")
-plot_heatmap(with_forward, "Accuracy for pollution level\n(with forward)")
-improvement = (1 - without_forward) - (1 - with_forward)/((1 - without_forward))
-plot_heatmap(improvement, "Improvement")
+plot_heatmap(without_forward, "Error rate for pollution level\n(without forward)")
+plot_heatmap(with_forward, "Error rate for pollution level\n(with forward)")
+improvement = (without_forward - with_forward)/without_forward
+plot_heatmap(improvement, "Improvement", color_map=plt.cm.RdBu, vmin=-0.72, vmax=0.72)
+
+#%%
+improvement
 
 #%%
