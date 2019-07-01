@@ -17,10 +17,24 @@ from tensorflow import keras
 from keras.utils import to_categorical
 from keras.backend import dot, transpose, categorical_crossentropy
 
+#%% seeding random
+
+from numpy.random import seed
+seed(1)
+from tensorflow import set_random_seed
+set_random_seed(2)
+
 #%% reading training and test data
 
 train = pd.read_csv("income/adult_treinamento2.csv")
 test = pd.read_csv("income/adult_teste2.csv")
+
+for k in test.keys():
+    categories = test[k].value_counts()
+    print(categories)
+    print("\n")
+
+test.describe()
 
 #%% encoding data
 
@@ -39,10 +53,10 @@ test = ct.transform(test)
 
 #%% X, y splitting
 X_train = train[:,:-2]
-y_train = train[:,-2:]
+y_train = train[:,-2:].todense()
 
 X_test = test[:,:-2]
-y_test = test[:,-2:]
+y_test = test[:,-2:].todense()
 
 #%% specifying model
 
@@ -59,7 +73,7 @@ def create_model():
 #%% pollute functions
 def pollute(data, T):
     polluted_data = data.copy()
-    for i in range(data.size):
+    for i in range(data.shape[0]):
         r = np.random.rand(1)
         # if class is 0
         if data[i,0] == 1:       
@@ -83,6 +97,18 @@ def forward_categorical_crossentropy(T):
     def loss(y_true,y_pred):
         pred = transpose(dot(transpose(T), transpose(y_pred)))
         return categorical_crossentropy(y_true, pred)
+   
+    # Return a function
+    return loss
+
+#%% custom loss function for backward
+
+def backward_categorical_crossentropy(T):
+
+    # Create a loss function that adds the MSE loss to the mean of all squared activations of a specific layer
+    def loss(y_true,y_pred):
+        base_loss = categorical_crossentropy(y_true, y_pred)
+        return dot(np.linalg.pinv(T), base_loss)
    
     # Return a function
     return loss
@@ -126,6 +152,7 @@ false_negative_rates = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
 
 without_forward_results = np.zeros( (len(false_positive_rates), len(false_negative_rates)) ) 
 forward_results = np.zeros( (len(false_positive_rates), len(false_negative_rates)) ) 
+backward_results = np.zeros( (len(false_positive_rates), len(false_negative_rates)) ) 
 
 for i, fp in enumerate(false_negative_rates):
     for j, fn in enumerate(false_negative_rates):
@@ -134,23 +161,37 @@ for i, fp in enumerate(false_negative_rates):
                       [fn  , 1-fn]]).astype(np.float32)
 
         polluted_labels = pollute(y_train, T)
-        forward_function = forward_categorical_crossentropy(T)
+        forward_loss = forward_categorical_crossentropy(T)
+        backward_loss = backward_categorical_crossentropy(T)
 
         # polluted data without forward
-        test_loss, test_acc = evaluate(X_train, X_test, y_train, y_test,
-                                        polluted_y_data=polluted_labels,
-                                        loss_function=categorical_crossentropy)
-        print('Test accuracy without forward:', test_acc)
-        without_forward_results[i,j] = test_acc
+        #test_loss, test_acc = evaluate(X_train, X_test, y_train, y_test,
+        #                                polluted_y_data=polluted_labels,
+        #                                loss_function=categorical_crossentropy)
+        #print('Test accuracy without forward:', test_acc)
+        #without_forward_results[i,j] = test_acc
+
         # polluted data with forward
+        #test_loss, test_acc = evaluate(X_train, X_test, y_train, y_test,
+        #                                polluted_y_data=polluted_labels,
+        #                                loss_function=forward_loss)
+        #print('Test accuracy with forward:', test_acc)
+        #forward_results[i,j] = test_acc
+
+        # polluted data with backward
         test_loss, test_acc = evaluate(X_train, X_test, y_train, y_test,
                                         polluted_y_data=polluted_labels,
-                                        loss_function=forward_function)
+                                        loss_function=forward_loss)
         print('Test accuracy with forward:', test_acc)
-        forward_results[i,j] = test_acc
+        backward_results[i,j] = test_acc
 
 print('Baseline test accuracy:', baseline_result)
 print("Results without forward:")
 pprint(without_forward_results)
 print("Results with forward:")
 pprint(forward_results)
+print("Results with backward:")
+pprint(backward_results)
+#%%
+
+#%%
