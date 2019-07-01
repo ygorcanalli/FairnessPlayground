@@ -68,14 +68,16 @@ def plot_heatmap(data, title, color_map=plt.cm.Reds, vmin=None, vmax=None):
         ax.set_title(title)
         fig.tight_layout()
         plt.show()
+        fig.savefig(title+".pdf", bbox_inches='tight')
 
 #%%
-plot_heatmap(without_forward, "Error rate for pollution level\n(without forward)")
-plot_heatmap(with_forward, "Error rate for pollution level\n(with forward)")
+plot_heatmap(without_forward, "Error rate for pollution level\n(without forward)", vmin=0, vmax=0.6)
+plot_heatmap(with_forward, "Error rate for pollution level\n(with forward)", vmin=0, vmax=0.6)
 improvement = (without_forward - with_forward)/without_forward
-plot_heatmap(improvement, "Improvement", color_map=plt.cm.RdBu, vmin=-0.72, vmax=0.72)
+plot_heatmap(improvement, "Forward improvement", color_map=plt.cm.RdBu, vmin=-0.72, vmax=0.72)
 
 #%%
 improvement
 
 #%%
+
