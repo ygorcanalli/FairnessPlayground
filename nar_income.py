@@ -186,10 +186,10 @@ for i, fp in enumerate(false_negative_rates):
         backward_results[i,j] = test_acc
 
 print('Baseline test accuracy:', baseline_result)
-print("Results without forward:")
-pprint(without_forward_results)
-print("Results with forward:")
-pprint(forward_results)
+#print("Results without forward:")
+#pprint(without_forward_results)
+#print("Results with forward:")
+#pprint(forward_results)
 print("Results with backward:")
 pprint(backward_results)
 #%%
