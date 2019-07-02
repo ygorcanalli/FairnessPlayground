@@ -24,40 +24,6 @@ seed(1)
 from tensorflow import set_random_seed
 set_random_seed(2)
 
-#%% reading training and test data
-
-train = pd.read_csv("income/adult_treinamento2.csv")
-test = pd.read_csv("income/adult_teste2.csv")
-
-for k in test.keys():
-    categories = test[k].value_counts()
-    print(categories)
-    print("\n")
-
-test.describe()
-
-#%% encoding data
-
-categorical_features = [1,3,5,6,7,8,9,13]
-numerical_features = [0,2,4,10,11,12]
-target_class = [14]
-
-ct = ColumnTransformer([
-    ("categorical_onehot", OneHotEncoder(handle_unknown='ignore'), categorical_features),
-    ("numerical", MinMaxScaler(), numerical_features),
-    ("categorical_onehot_target", OneHotEncoder(handle_unknown='ignore'), target_class)
-    ])
-
-train = ct.fit_transform(train)
-test = ct.transform(test)
-
-#%% X, y splitting
-X_train = train[:,:-2]
-y_train = train[:,-2:].todense()
-
-X_test = test[:,:-2]
-y_test = test[:,-2:].todense()
-
 #%% specifying model
 
 def create_model():
@@ -138,6 +104,42 @@ def evaluate(X_train, X_test, y_train, y_test,
     # testing with non polluted data
     return model.evaluate(X_test, y_test)
 
+
+
+#%% reading training and test data
+
+train = pd.read_csv("income/adult_treinamento2.csv")
+test = pd.read_csv("income/adult_teste2.csv")
+
+for k in test.keys():
+    categories = test[k].value_counts()
+    print(categories)
+    print("\n")
+
+test.describe()
+
+#%% encoding data
+
+categorical_features = [1,3,5,6,7,8,9,13]
+numerical_features = [0,2,4,10,11,12]
+target_class = [14]
+
+ct = ColumnTransformer([
+    ("categorical_onehot", OneHotEncoder(handle_unknown='ignore'), categorical_features),
+    ("numerical", MinMaxScaler(), numerical_features),
+    ("categorical_onehot_target", OneHotEncoder(handle_unknown='ignore'), target_class)
+    ])
+
+parsed_train = ct.fit_transform(train)
+parsed_test = ct.transform(test)
+
+#%% X, y splitting
+X_train = parsed_train[:,:-2]
+y_train = parsed_train[:,-2:].todense()
+
+X_test = parsed_test[:,:-2]
+y_test = parsed_test[:,-2:].todense()
+
 #%% baseline
 test_loss, test_acc = evaluate(X_train, X_test, y_train, y_test,
                                 polluted_y_data=None, loss_function=categorical_crossentropy)
@@ -145,53 +147,67 @@ print('Baseline test accuracy:', test_acc)
 
 baseline_result = test_acc
 
-#%% evaluating different error rates
+#%% nnar noise
+fp_male = 0.3
+fn_male = 0.1
+T_male = np.array([[1-fp_male, fp_male],
+                   [ fn_male , 1-fn_male]]).astype(np.float32)
 
-false_positive_rates = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
-false_negative_rates = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
+fp_female = 0.05
+fn_female = 0.4
+T_female = np.array([[1-fp_female, fp_female],
+                     [ fn_female , 1-fn_female]]).astype(np.float32)
 
-without_forward_results = np.zeros( (len(false_positive_rates), len(false_negative_rates)) ) 
-forward_results = np.zeros( (len(false_positive_rates), len(false_negative_rates)) ) 
-backward_results = np.zeros( (len(false_positive_rates), len(false_negative_rates)) ) 
+forward_male_loss = forward_categorical_crossentropy(T_male)
+forward_female_loss = forward_categorical_crossentropy(T_female)
 
-for i, fp in enumerate(false_negative_rates):
-    for j, fn in enumerate(false_negative_rates):
-        print("fp_rate: ", fp, " fn_rate: ", fn)
-        T = np.array([[1-fp, fp],
-                      [fn  , 1-fn]]).astype(np.float32)
+# indentifying males and females
+train_male = train[train.sex == "Male"]
+train_female = train[train.sex == "Female"]
 
-        polluted_labels = pollute(y_train, T)
-        forward_loss = forward_categorical_crossentropy(T)
-        backward_loss = backward_categorical_crossentropy(T)
+parsed_train_male = ct.transform(train_male)
+parsed_train_female = ct.transform(train_female)
 
-        # polluted data without forward
-        #test_loss, test_acc = evaluate(X_train, X_test, y_train, y_test,
-        #                                polluted_y_data=polluted_labels,
-        #                                loss_function=categorical_crossentropy)
-        #print('Test accuracy without forward:', test_acc)
-        #without_forward_results[i,j] = test_acc
+X_train_male = parsed_train_male[:,:-2].todense()
+y_train_male = parsed_train_male[:,-2:].todense()
 
-        # polluted data with forward
-        #test_loss, test_acc = evaluate(X_train, X_test, y_train, y_test,
-        #                                polluted_y_data=polluted_labels,
-        #                                loss_function=forward_loss)
-        #print('Test accuracy with forward:', test_acc)
-        #forward_results[i,j] = test_acc
+X_train_female = parsed_train_female[:,:-2].todense()
+y_train_female = parsed_train_female[:,-2:].todense()
 
-        # polluted data with backward
-        test_loss, test_acc = evaluate(X_train, X_test, y_train, y_test,
-                                        polluted_y_data=polluted_labels,
-                                        loss_function=forward_loss)
-        print('Test accuracy with forward:', test_acc)
-        backward_results[i,j] = test_acc
+polluted_male_labels = pollute(y_train_male, T_male)
+polluted_female_labels = pollute(y_train_female, T_female)
 
-print('Baseline test accuracy:', baseline_result)
-#print("Results without forward:")
-#pprint(without_forward_results)
-#print("Results with forward:")
-#pprint(forward_results)
-print("Results with backward:")
-pprint(backward_results)
+X_train = np.vstack([X_train_male, X_train_female])
+polluted_labels = np.vstack([polluted_male_labels, polluted_female_labels])
 #%%
 
+# polluted data without forward
+test_loss, test_acc = evaluate(X_train, X_test, y_train, y_test,
+                                polluted_y_data=polluted_labels,
+                                loss_function=categorical_crossentropy)
+print('Test accuracy without forward:', test_acc)
+
+#%%
+# polluted data with forward
+print('Test accuracy with forward:', test_acc)
+
+# initializing model
+model = create_model()
+
+# specifying optmizer, loss and metrics
+model.compile(optimizer='adam', 
+            loss=forward_female_loss,
+            metrics=['accuracy'])
+
+model.fit(X_train_female, polluted_female_labels, epochs=5)
+
+# specifying optmizer, loss and metrics
+model.compile(optimizer='adam', 
+            loss=forward_male_loss,
+            metrics=['accuracy'])
+
+model.fit(X_train_male, polluted_male_labels, epochs=5)
+
+# testing with non polluted data
+return model.evaluate(X_test, y_test)
 #%%
