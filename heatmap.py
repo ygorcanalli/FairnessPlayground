@@ -10,7 +10,7 @@ fp_rate = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
 fn_rate = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
 
 
-without_forward = 1 - np.array([[0.8335892 , 0.83143997, 0.82591343, 0.8038072 , 0.8038072 ,
+baseline = 1 - np.array([[0.8335892 , 0.83143997, 0.82591343, 0.8038072 , 0.8038072 ,
         0.76481426],
        [0.83113295, 0.83573842, 0.8200798 , 0.82038689, 0.77126187,
         0.76082283],
@@ -22,7 +22,7 @@ without_forward = 1 - np.array([[0.8335892 , 0.83143997, 0.82591343, 0.8038072 ,
         0.75683147],
        [0.46576604, 0.4009825 , 0.49554804, 0.61743939, 0.45716918,
         0.49831134]])
-with_forward = 1 - np.array([[0.83850169, 0.83297515, 0.83451027, 0.83236104, 0.83727354,
+forward = 1 - np.array([[0.83850169, 0.83297515, 0.83451027, 0.83236104, 0.83727354,
         0.83143997],
        [0.83850169, 0.83236104, 0.83481729, 0.8305189 , 0.82407123,
         0.82161498],
@@ -34,6 +34,18 @@ with_forward = 1 - np.array([[0.83850169, 0.83297515, 0.83451027, 0.83236104, 0.
         0.76020879],
        [0.82345718, 0.83205402, 0.81823766, 0.81793064, 0.74762052,
         0.44273871]])
+backward = 1 - np.array([[0.83573842, 0.83635247, 0.83082592, 0.83727354, 0.8286767 ,
+        0.82468528],
+       [0.83389622, 0.83880872, 0.82714152, 0.83573842, 0.82898372,
+        0.82591343],
+       [0.8354314 , 0.83297515, 0.82806265, 0.82345718, 0.82222903,
+        0.81639546],
+       [0.83143997, 0.831747  , 0.82315016, 0.82622045, 0.81915873,
+        0.82315016],
+       [0.83113295, 0.82929075, 0.82806265, 0.82775563, 0.7988947 ,
+        0.80718452],
+       [0.83021188, 0.8305189 , 0.83297515, 0.80810565, 0.74669939,
+        0.59134173]])
 
 #%%
 
@@ -71,13 +83,12 @@ def plot_heatmap(data, title, color_map=plt.cm.Reds, vmin=None, vmax=None):
         fig.savefig(title+".pdf", bbox_inches='tight')
 
 #%%
-plot_heatmap(without_forward, "Error rate for pollution level\n(without forward)", vmin=0, vmax=0.6)
-plot_heatmap(with_forward, "Error rate for pollution level\n(with forward)", vmin=0, vmax=0.6)
-improvement = (without_forward - with_forward)/without_forward
-plot_heatmap(improvement, "Forward improvement", color_map=plt.cm.RdBu, vmin=-0.72, vmax=0.72)
-
-#%%
-improvement
-
+plot_heatmap(baseline, "Baseline error rate", vmin=0, vmax=0.6)
+plot_heatmap(forward, "Forward error rate", vmin=0, vmax=0.6)
+forward_improvement = (baseline - forward)/baseline
+plot_heatmap(forward_improvement, "Forward improvement", color_map=plt.cm.RdBu, vmin=-0.72, vmax=0.72)
+plot_heatmap(backward, "Backward error rate", vmin=0, vmax=0.6)
+backward_improvement = (baseline - backward)/baseline
+plot_heatmap(backward_improvement, "Backward improvement", color_map=plt.cm.RdBu, vmin=-0.72, vmax=0.72)
 #%%
 
