@@ -5,7 +5,7 @@ import numpy as np
 from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, MinMaxScaler
 from sklearn.compose import ColumnTransformer
 from pprint import pprint
-import sys
+import getopt, sys
 
 # default gpu to 0
 import os
@@ -109,18 +109,18 @@ def evaluate(X_train, X_test, y_train, y_test,
 def main():
     try:
         opts, args = getopt.getopt(sys.argv[1:], "hd", ["help","directory="])
-    except:
+    except getopt.GetoptError as err:
         print(err)
-        usage()
         sys.exit(2)
     directory=None
+    pprint(opts)
     for o, a in opts:
         if o in ("-h", "--help"):
-            usage()
             sys.exit()
         elif o in ("-d", "--directory"):
-            director = a
-        else
+            directory = a
+            print ( "saving results to " + directory )
+        else:
             assert False, "unhaldled option"
 
     train = pd.read_csv("income/adult_treinamento2.csv")
@@ -186,7 +186,7 @@ def main():
             test_loss, test_acc = evaluate(X_train, X_test, y_train, y_test,
                                             polluted_y_data=polluted_labels,
                                             loss_function=categorical_crossentropy)
-            print('Test accuracy without forward:', test_acc)
+            print('Test accuracy without correction:', test_acc)
             without_forward_results[i,j] = test_acc
 
             # polluted data with forward
@@ -199,8 +199,8 @@ def main():
             # polluted data with backward
             test_loss, test_acc = evaluate(X_train, X_test, y_train, y_test,
                                             polluted_y_data=polluted_labels,
-                                            loss_function=forward_loss)
-            print('Test accuracy with forward:', test_acc)
+                                            loss_function=backward_loss)
+            print('Test accuracy with backward:', test_acc)
             backward_results[i,j] = test_acc
 
     print('Baseline test accuracy:', baseline_result)
@@ -215,4 +215,6 @@ def main():
     np.savetxt(os.path.join(directory,"backward.csv"), backward_results, delimiter=",")
     #%%
 
+if __name__ == "__main__":
+    main()
 #%%
