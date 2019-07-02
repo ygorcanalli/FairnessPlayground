@@ -2,24 +2,31 @@
 # -------------------------------------------------------
 #  find last created directory: format NNNN
 # -------------------------------------------------------
-basedir=results
+originaldir=$PWD
+pythonpath="~/anaconda3/bin/python"
+basedir="results"
+mkdir -p $basedir
 cd $basedir
 lastdir=$(ls -d [0-9][0-9][0-9][0-9] | tail -1)
-cd ..
+
 # -------------------------------------------------------
 #  create new sequential directory
 # -------------------------------------------------------
 next=$((++lastdir))
 newdir=$(printf "%04u" $next)
-mkdir $basedir/$newdir
+mkdir $newdir
+cd $newdir
 
-infofile=$basedir/$newdir/run.info
-logfile=$basedir/$newdir/nohup.out
+destinationdir=$PWD
 
-echo "Saving output to $logfile"
+infofile="run.info"
+logfile="nohup.out"
+
+echo "Saving output to $destinationdir/$logfile"
 
 echo "Command: ${0} ${@}" >> $infofile
+echo "Directory: $originaldir" >> $infofile
 echo "Date: $(date)" >> $infofile
 echo "Current commit: $(git rev-parse HEAD)" >> $infofile
 
-eval "nohup ${@} >> $logfile 1>> $logfile 2>> $logfile &"
+eval "nohup $pythonpath $originaldir/${@} >> $logfile 1>> $logfile 2>> $logfile &"
