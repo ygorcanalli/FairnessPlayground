@@ -22,7 +22,7 @@ from keras.backend import dot, transpose, categorical_crossentropy
 from numpy.random import seed
 seed(1)
 from tensorflow import set_random_seed
-set_random_seed(2)
+set_random_seed(1)
 
 #%% reading training and test data
 
@@ -165,18 +165,18 @@ for i, fp in enumerate(false_negative_rates):
         backward_loss = backward_categorical_crossentropy(T)
 
         # polluted data without forward
-        #test_loss, test_acc = evaluate(X_train, X_test, y_train, y_test,
-        #                                polluted_y_data=polluted_labels,
-        #                                loss_function=categorical_crossentropy)
-        #print('Test accuracy without forward:', test_acc)
-        #without_forward_results[i,j] = test_acc
+        test_loss, test_acc = evaluate(X_train, X_test, y_train, y_test,
+                                        polluted_y_data=polluted_labels,
+                                        loss_function=categorical_crossentropy)
+        print('Test accuracy without forward:', test_acc)
+        without_forward_results[i,j] = test_acc
 
         # polluted data with forward
-        #test_loss, test_acc = evaluate(X_train, X_test, y_train, y_test,
-        #                                polluted_y_data=polluted_labels,
-        #                                loss_function=forward_loss)
-        #print('Test accuracy with forward:', test_acc)
-        #forward_results[i,j] = test_acc
+        test_loss, test_acc = evaluate(X_train, X_test, y_train, y_test,
+                                        polluted_y_data=polluted_labels,
+                                        loss_function=forward_loss)
+        print('Test accuracy with forward:', test_acc)
+        forward_results[i,j] = test_acc
 
         # polluted data with backward
         test_loss, test_acc = evaluate(X_train, X_test, y_train, y_test,
@@ -188,10 +188,13 @@ for i, fp in enumerate(false_negative_rates):
 print('Baseline test accuracy:', baseline_result)
 print("Results without forward:")
 pprint(without_forward_results)
+np.savetxt("baseline.csv", without_forward_results, delimiter=",")
 print("Results with forward:")
 pprint(forward_results)
+np.savetxt("forward.csv", forward_results, delimiter=",")
 print("Results with backward:")
 pprint(backward_results)
+np.savetxt("backward.csv", backward_results, delimiter=",")
 #%%
 
 #%%
