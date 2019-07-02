@@ -16,7 +16,7 @@ os.environ["CUDA_VISIBLE_DEVICES"]="0"
 import tensorflow as tf
 from tensorflow import keras
 from keras.utils import to_categorical
-from keras.backend import dot, transpose, categorical_crossentropy
+from keras.backend import variable, dot, transpose, categorical_crossentropy
 
 #%% seeding random
 
@@ -75,7 +75,8 @@ def backward_categorical_crossentropy(T):
     # Create a loss function that adds the MSE loss to the mean of all squared activations of a specific layer
     def loss(y_true,y_pred):
         base_loss = categorical_crossentropy(y_true, y_pred)
-        return dot(np.linalg.pinv(T), base_loss)
+        pprint(base_loss)
+        return dot(variable(np.linalg.pinv(T)), base_loss)
    
     # Return a function
     return loss
@@ -157,12 +158,12 @@ def main():
 
 
     #%% baseline
+    """
     test_loss, test_acc = evaluate(X_train, X_test, y_train, y_test,
                                     polluted_y_data=None, loss_function=categorical_crossentropy)
     print('Baseline test accuracy:', test_acc)
-
     baseline_result = test_acc
-
+    """
     #%% evaluating different error rates
 
     false_positive_rates = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
@@ -182,6 +183,7 @@ def main():
             forward_loss = forward_categorical_crossentropy(T)
             backward_loss = backward_categorical_crossentropy(T)
 
+            """
             # polluted data without forward
             test_loss, test_acc = evaluate(X_train, X_test, y_train, y_test,
                                             polluted_y_data=polluted_labels,
@@ -195,7 +197,7 @@ def main():
                                             loss_function=forward_loss)
             print('Test accuracy with forward:', test_acc)
             forward_results[i,j] = test_acc
-
+            """
             # polluted data with backward
             test_loss, test_acc = evaluate(X_train, X_test, y_train, y_test,
                                             polluted_y_data=polluted_labels,
@@ -203,7 +205,7 @@ def main():
             print('Test accuracy with backward:', test_acc)
             backward_results[i,j] = test_acc
 
-    print('Baseline test accuracy:', baseline_result)
+    #print('Baseline test accuracy:', baseline_result)
     print("Results without forward:")
     pprint(without_forward_results)
     np.savetxt(os.path.join(directory,"baseline.csv"), without_forward_results, delimiter=",")
