@@ -29,4 +29,5 @@ echo "Directory: $originaldir" >> $infofile
 echo "Date: $(date)" >> $infofile
 echo "Current commit: $(git rev-parse HEAD)" >> $infofile
 
-eval "nohup $pythonpath $originaldir/${@} >> $logfile 1>> $logfile 2>> $logfile &"
+cd $originaldir
+eval "nohup $pythonpath ${@} -d=$destinationdir>> $logfile 1>> $logfile 2>> $logfile &"

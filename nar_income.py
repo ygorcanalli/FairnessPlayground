@@ -5,6 +5,7 @@ import numpy as np
 from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, MinMaxScaler
 from sklearn.compose import ColumnTransformer
 from pprint import pprint
+import sys
 
 # default gpu to 0
 import os
@@ -23,40 +24,6 @@ from numpy.random import seed
 seed(1)
 from tensorflow import set_random_seed
 set_random_seed(1)
-
-#%% reading training and test data
-
-train = pd.read_csv("income/adult_treinamento2.csv")
-test = pd.read_csv("income/adult_teste2.csv")
-
-for k in test.keys():
-    categories = test[k].value_counts()
-    print(categories)
-    print("\n")
-
-test.describe()
-
-#%% encoding data
-
-categorical_features = [1,3,5,6,7,8,9,13]
-numerical_features = [0,2,4,10,11,12]
-target_class = [14]
-
-ct = ColumnTransformer([
-    ("categorical_onehot", OneHotEncoder(handle_unknown='ignore'), categorical_features),
-    ("numerical", MinMaxScaler(), numerical_features),
-    ("categorical_onehot_target", OneHotEncoder(handle_unknown='ignore'), target_class)
-    ])
-
-train = ct.fit_transform(train)
-test = ct.transform(test)
-
-#%% X, y splitting
-X_train = train[:,:-2]
-y_train = train[:,-2:].todense()
-
-X_test = test[:,:-2]
-y_test = test[:,-2:].todense()
 
 #%% specifying model
 
@@ -138,63 +105,114 @@ def evaluate(X_train, X_test, y_train, y_test,
     # testing with non polluted data
     return model.evaluate(X_test, y_test)
 
-#%% baseline
-test_loss, test_acc = evaluate(X_train, X_test, y_train, y_test,
-                                polluted_y_data=None, loss_function=categorical_crossentropy)
-print('Baseline test accuracy:', test_acc)
+#%% reading training and test data
+def main():
+    try:
+        opts, args = getopt.getopt(sys.argv[1:], "hd", ["help","directory="])
+    except:
+        print(err)
+        usage()
+        sys.exit(2)
+    directory=None
+    for o, a in opts:
+        if o in ("-h", "--help"):
+            usage()
+            sys.exit()
+        elif o in ("-d", "--directory"):
+            director = a
+        else
+            assert False, "unhaldled option"
 
-baseline_result = test_acc
+    train = pd.read_csv("income/adult_treinamento2.csv")
+    test = pd.read_csv("income/adult_teste2.csv")
 
-#%% evaluating different error rates
+    for k in test.keys():
+        categories = test[k].value_counts()
+        print(categories)
+        print("\n")
 
-false_positive_rates = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
-false_negative_rates = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
+    test.describe()
 
-without_forward_results = np.zeros( (len(false_positive_rates), len(false_negative_rates)) ) 
-forward_results = np.zeros( (len(false_positive_rates), len(false_negative_rates)) ) 
-backward_results = np.zeros( (len(false_positive_rates), len(false_negative_rates)) ) 
+    #%% encoding data
 
-for i, fp in enumerate(false_negative_rates):
-    for j, fn in enumerate(false_negative_rates):
-        print("fp_rate: ", fp, " fn_rate: ", fn)
-        T = np.array([[1-fp, fp],
-                      [fn  , 1-fn]]).astype(np.float32)
+    categorical_features = [1,3,5,6,7,8,9,13]
+    numerical_features = [0,2,4,10,11,12]
+    target_class = [14]
 
-        polluted_labels = pollute(y_train, T)
-        forward_loss = forward_categorical_crossentropy(T)
-        backward_loss = backward_categorical_crossentropy(T)
+    ct = ColumnTransformer([
+        ("categorical_onehot", OneHotEncoder(handle_unknown='ignore'), categorical_features),
+        ("numerical", MinMaxScaler(), numerical_features),
+        ("categorical_onehot_target", OneHotEncoder(handle_unknown='ignore'), target_class)
+        ])
 
-        # polluted data without forward
-        test_loss, test_acc = evaluate(X_train, X_test, y_train, y_test,
-                                        polluted_y_data=polluted_labels,
-                                        loss_function=categorical_crossentropy)
-        print('Test accuracy without forward:', test_acc)
-        without_forward_results[i,j] = test_acc
+    train = ct.fit_transform(train)
+    test = ct.transform(test)
 
-        # polluted data with forward
-        test_loss, test_acc = evaluate(X_train, X_test, y_train, y_test,
-                                        polluted_y_data=polluted_labels,
-                                        loss_function=forward_loss)
-        print('Test accuracy with forward:', test_acc)
-        forward_results[i,j] = test_acc
+    #%% X, y splitting
+    X_train = train[:,:-2]
+    y_train = train[:,-2:].todense()
 
-        # polluted data with backward
-        test_loss, test_acc = evaluate(X_train, X_test, y_train, y_test,
-                                        polluted_y_data=polluted_labels,
-                                        loss_function=forward_loss)
-        print('Test accuracy with forward:', test_acc)
-        backward_results[i,j] = test_acc
+    X_test = test[:,:-2]
+    y_test = test[:,-2:].todense()
 
-print('Baseline test accuracy:', baseline_result)
-print("Results without forward:")
-pprint(without_forward_results)
-np.savetxt("baseline.csv", without_forward_results, delimiter=",")
-print("Results with forward:")
-pprint(forward_results)
-np.savetxt("forward.csv", forward_results, delimiter=",")
-print("Results with backward:")
-pprint(backward_results)
-np.savetxt("backward.csv", backward_results, delimiter=",")
-#%%
+
+    #%% baseline
+    test_loss, test_acc = evaluate(X_train, X_test, y_train, y_test,
+                                    polluted_y_data=None, loss_function=categorical_crossentropy)
+    print('Baseline test accuracy:', test_acc)
+
+    baseline_result = test_acc
+
+    #%% evaluating different error rates
+
+    false_positive_rates = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
+    false_negative_rates = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
+
+    without_forward_results = np.zeros( (len(false_positive_rates), len(false_negative_rates)) ) 
+    forward_results = np.zeros( (len(false_positive_rates), len(false_negative_rates)) ) 
+    backward_results = np.zeros( (len(false_positive_rates), len(false_negative_rates)) ) 
+
+    for i, fp in enumerate(false_negative_rates):
+        for j, fn in enumerate(false_negative_rates):
+            print("fp_rate: ", fp, " fn_rate: ", fn)
+            T = np.array([[1-fp, fp],
+                          [fn  , 1-fn]]).astype(np.float32)
+
+            polluted_labels = pollute(y_train, T)
+            forward_loss = forward_categorical_crossentropy(T)
+            backward_loss = backward_categorical_crossentropy(T)
+
+            # polluted data without forward
+            test_loss, test_acc = evaluate(X_train, X_test, y_train, y_test,
+                                            polluted_y_data=polluted_labels,
+                                            loss_function=categorical_crossentropy)
+            print('Test accuracy without forward:', test_acc)
+            without_forward_results[i,j] = test_acc
+
+            # polluted data with forward
+            test_loss, test_acc = evaluate(X_train, X_test, y_train, y_test,
+                                            polluted_y_data=polluted_labels,
+                                            loss_function=forward_loss)
+            print('Test accuracy with forward:', test_acc)
+            forward_results[i,j] = test_acc
+
+            # polluted data with backward
+            test_loss, test_acc = evaluate(X_train, X_test, y_train, y_test,
+                                            polluted_y_data=polluted_labels,
+                                            loss_function=forward_loss)
+            print('Test accuracy with forward:', test_acc)
+            backward_results[i,j] = test_acc
+
+    print('Baseline test accuracy:', baseline_result)
+    print("Results without forward:")
+    pprint(without_forward_results)
+    np.savetxt(os.path.join(directory,"baseline.csv"), without_forward_results, delimiter=",")
+    print("Results with forward:")
+    pprint(forward_results)
+    np.savetxt(os.path.join(directory,"forward.csv"), forward_results, delimiter=",")
+    print("Results with backward:")
+    pprint(backward_results)
+    np.savetxt(os.path.join(directory,"backward.csv"), backward_results, delimiter=",")
+    #%%
 
 #%%
