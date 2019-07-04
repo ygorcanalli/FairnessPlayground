@@ -142,7 +142,9 @@ y_test = parsed_test[:,-2:].todense()
 
 #%% baseline
 test_loss, test_acc = evaluate(X_train, X_test, y_train, y_test,
-                                polluted_y_data=None, loss_function=categorical_crossentropy)
+                                polluted_y_data=None,
+                                loss_function=categorical_crossentropy,
+                                traning_epochs=6)
 print('Baseline test accuracy:', test_acc)
 
 baseline_result = test_acc
