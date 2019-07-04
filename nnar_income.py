@@ -184,7 +184,8 @@ polluted_labels = np.vstack([polluted_male_labels, polluted_female_labels])
 # polluted data without forward
 test_loss, test_acc = evaluate(X_train, X_test, y_train, y_test,
                                 polluted_y_data=polluted_labels,
-                                loss_function=categorical_crossentropy)
+                                loss_function=categorical_crossentropy,
+                                traning_epochs=6)
 print('Test accuracy without forward:', test_acc)
 
 #%%
@@ -199,15 +200,16 @@ model.compile(optimizer='adam',
             loss=forward_female_loss,
             metrics=['accuracy'])
 
-model.fit(X_train_female, polluted_female_labels, epochs=5)
+model.fit(X_train_female, polluted_female_labels, epochs=3)
 
 # specifying optmizer, loss and metrics
 model.compile(optimizer='adam', 
             loss=forward_male_loss,
             metrics=['accuracy'])
 
-model.fit(X_train_male, polluted_male_labels, epochs=5)
+model.fit(X_train_male, polluted_male_labels, epochs=3)
 
 # testing with non polluted data
-return model.evaluate(X_test, y_test)
+test_loss, test_acc = model.evaluate(X_test, y_test)
+print('Test accuracy with forward:', test_acc)
 #%%
