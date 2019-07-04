@@ -104,6 +104,35 @@ def evaluate(X_train, X_test, y_train, y_test,
     # testing with non polluted data
     return model.evaluate(X_test, y_test)
 
+#%%
+def two_step_evaluate(X_train_1st, y_train_1st,
+                    X_train_2nd, y_train_2nd,
+                    X_test,y_test, 
+                model_function=create_model,
+                traning_epochs=5,
+                loss_function_1st=categorical_crossentropy,
+                loss_function_2nd=categorical_crossentropy):
+
+    # initializing model
+    model = create_model()
+
+    # specifying optmizer, loss and metrics
+    model.compile(optimizer='adam', 
+                loss=loss_function_1st,
+                metrics=['accuracy'])
+
+    model.fit(X_train_2nd, y_train_2nd, epochs=traning_epochs)
+
+    # specifying optmizer, loss and metrics
+    model.compile(optimizer='adam', 
+                loss=loss_function_2nd,
+                metrics=['accuracy'])
+
+    model.fit(X_train_male, polluted_male_labels, epochs=traning_epochs)
+
+    # testing with non polluted data
+    return model.evaluate(X_test, y_test)
+
 
 
 #%% reading training and test data
@@ -186,32 +215,15 @@ polluted_labels = np.vstack([polluted_male_labels, polluted_female_labels])
 # polluted data without forward
 test_loss, test_acc = evaluate(X_train, X_test, y_train, y_test,
                                 polluted_y_data=polluted_labels,
-                                loss_function=categorical_crossentropy,
-                                traning_epochs=6)
+                                loss_function=categorical_crossentropy)
 print('Test accuracy without forward:', test_acc)
 
 #%%
-# polluted data with forward
-print('Test accuracy with forward:', test_acc)
-
-# initializing model
-model = create_model()
-
-# specifying optmizer, loss and metrics
-model.compile(optimizer='adam', 
-            loss=forward_female_loss,
-            metrics=['accuracy'])
-
-model.fit(X_train_female, polluted_female_labels, epochs=3)
-
-# specifying optmizer, loss and metrics
-model.compile(optimizer='adam', 
-            loss=forward_male_loss,
-            metrics=['accuracy'])
-
-model.fit(X_train_male, polluted_male_labels, epochs=3)
-
-# testing with non polluted data
-test_loss, test_acc = model.evaluate(X_test, y_test)
+test_loss, test_acc = two_step_evaluate(X_train_female, polluted_female_labels,
+                                        X_train_male, polluted_male_labels,
+                                        X_test,y_test, 
+                                        model_function=create_model,
+                                        loss_function_1st=forward_female_loss,
+                                        loss_function_2nd=forward_male_loss)
 print('Test accuracy with forward:', test_acc)
 #%%
