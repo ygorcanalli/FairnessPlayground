@@ -26,5 +26,6 @@ echo "Command: ${0} ${@}" >> $infofile
 echo "Directory: $originaldir" >> $infofile
 echo "Date: $(date)" >> $infofile
 echo "Current commit: $(git rev-parse HEAD)" >> $infofile
+echo "Diff to commit: $(git diff)" >> $infofile
 
 eval "nohup $pythonpath ${@} --directory=$basedir/$newdir >> $logfile 1>> $logfile 2>> $logfile &"
