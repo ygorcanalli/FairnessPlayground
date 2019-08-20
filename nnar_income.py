@@ -6,6 +6,7 @@ from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, MinMaxScaler
 from sklearn.compose import ColumnTransformer
 from pprint import pprint
 import getopt, sys
+import persistence
 
 # default gpu to 0
 import os
@@ -171,11 +172,127 @@ def alternating_evaluate(X_train_1st, y_train_1st,
     # testing with non polluted data
     return loss, acc, pred
 
-#%%
-def append_result(df, params, pred):
-    a = np.hstack([params, pred])
-    df.loc[df.shape[0] + 1 + 1] = a
-#%% reading training and test data
+def eval_noise_level(db_path, X_train_male, y_train_male,
+                        X_train_female, y_train_female, 
+                        X_test, y_test, 
+                        fp_male, fn_male, fp_female, fn_female):
+    T_male = np.array([[1-fp_male, fp_male],
+                    [ fn_male , 1-fn_male]]).astype(np.float32)
+
+    T_female = np.array([[1-fp_female, fp_female],
+                        [ fn_female , 1-fn_female]]).astype(np.float32)
+
+    forward_male_loss = forward_categorical_crossentropy(T_male)
+    forward_female_loss = forward_categorical_crossentropy(T_female)
+
+    polluted_male_labels = pollute(y_train_male, T_male)
+    polluted_female_labels = pollute(y_train_female, T_female)
+
+    X_train = np.vstack([X_train_male, X_train_female])
+    y_train = np.vstack([y_train_male, y_train_female])
+    polluted_labels = np.vstack([polluted_male_labels, polluted_female_labels])
+
+    # polluted data without forward
+    test_loss, test_acc, test_pred = evaluate(X_train, X_test, y_train, y_test,
+                                    polluted_y_data=polluted_labels,
+                                    loss_function=categorical_crossentropy,
+                                    traning_epochs=6)
+    baseline_result = np.hstack([[fp_male, fn_male, fp_female, fn_female, test_loss, test_acc], test_pred])
+
+    # polluted data with two step forward on half epochs
+    test_loss, test_acc, test_pred = two_step_evaluate(X_train_female, polluted_female_labels,
+                                            X_train_male, polluted_male_labels,
+                                            X_test,y_test, 
+                                            model_function=create_model,
+                                            traning_epochs=3,
+                                            loss_function_1st=forward_female_loss,
+                                            loss_function_2nd=forward_male_loss)
+    two_step_forward_half_result = np.hstack([[fp_male, fn_male, fp_female, fn_female, test_loss, test_acc], test_pred])
+    #%%
+
+    # polluted data with two step forward
+    test_loss, test_acc, test_pred = two_step_evaluate(X_train_female, polluted_female_labels,
+                                            X_train_male, polluted_male_labels,
+                                            X_test,y_test, 
+                                            model_function=create_model,
+                                            traning_epochs=6,
+                                            loss_function_1st=forward_female_loss,
+                                            loss_function_2nd=forward_male_loss)
+    two_step_forward_result = np.hstack([[fp_male, fn_male, fp_female, fn_female, test_loss, test_acc], test_pred])
+
+    # polluted data with alternating forward on half epochs
+    test_loss, test_acc, test_pred = alternating_evaluate(X_train_female, polluted_female_labels,
+                                            X_train_male, polluted_male_labels,
+                                            X_test,y_test, 
+                                            model_function=create_model,
+                                            traning_epochs=3,
+                                            loss_function_1st=forward_female_loss,
+                                            loss_function_2nd=forward_male_loss)
+    alternating_forward_half_result = np.hstack([[fp_male, fn_male, fp_female, fn_female, test_loss, test_acc], test_pred])
+
+    # polluted data with alternating forward
+    test_loss, test_acc, test_pred = alternating_evaluate(X_train_female, polluted_female_labels,
+                                            X_train_male, polluted_male_labels,
+                                            X_test,y_test, 
+                                            model_function=create_model,
+                                            traning_epochs=6,
+                                            loss_function_1st=forward_female_loss,
+                                            loss_function_2nd=forward_male_loss)
+    alternating_forward_result = np.hstack([[fp_male, fn_male, fp_female, fn_female, test_loss, test_acc], test_pred])
+
+    # persist results
+    conn = persistence.create_connection(db_path)
+    with conn:
+        persistence.persist_nnar(conn, "baseline", y_test.shape[0], baseline_result)
+        persistence.persist_nnar(conn, "two_step_forward_half", y_test.shape[0], two_step_forward_half_result)
+        persistence.persist_nnar(conn, "two_step_forward", y_test.shape[0], two_step_forward_result)
+        persistence.persist_nnar(conn, "alternating_forward_half", y_test.shape[0], alternating_forward_half_result)
+        persistence.persist_nnar(conn, "alternating_forward", y_test.shape[0], alternating_forward_result)
+
+def load_data():
+    train = pd.read_csv("income/adult_treinamento2.csv")
+    test = pd.read_csv("income/adult_teste2.csv")
+
+    for k in test.keys():
+        categories = test[k].value_counts()
+        print(categories)
+        print("\n")
+
+    test.describe()
+
+    # encoding data
+
+    categorical_features = [1,3,5,6,7,8,9,13]
+    numerical_features = [0,2,4,10,11,12]
+    target_class = [14]
+
+    ct = ColumnTransformer([
+        ("categorical_onehot", OneHotEncoder(handle_unknown='ignore'), categorical_features),
+        ("numerical", MinMaxScaler(), numerical_features),
+        ("categorical_onehot_target", OneHotEncoder(handle_unknown='ignore'), target_class)
+        ])
+
+    parsed_train = ct.fit_transform(train)
+    parsed_test = ct.transform(test)
+
+    # X_test, y_test splitting
+    X_test = parsed_test[:,:-2]
+    y_test = parsed_test[:,-2:].todense()
+
+    # indentifying males and females
+    train_male = train[train.sex == "Male"]
+    train_female = train[train.sex == "Female"]
+
+    parsed_train_male = ct.transform(train_male)
+    parsed_train_female = ct.transform(train_female)
+
+    X_train_male = parsed_train_male[:,:-2].todense()
+    y_train_male = parsed_train_male[:,-2:].todense()
+
+    X_train_female = parsed_train_female[:,:-2].todense()
+    y_train_female = parsed_train_female[:,-2:].todense()
+
+    return X_train_male, y_train_male, X_train_female, y_train_female, X_test, y_test
 
 def main():
 
@@ -195,59 +312,19 @@ def main():
         else:
             assert False, "unhaldled option"
 
-    train = pd.read_csv("income/adult_treinamento2.csv")
-    test = pd.read_csv("income/adult_teste2.csv")
+    X_train_male, y_train_male, X_train_female, y_train_female, X_test, y_test = load_data()
 
-    for k in test.keys():
-        categories = test[k].value_counts()
-        print(categories)
-        print("\n")
+    # creating sqlite database
+    db_path = os.path.join(directory, "result.db")
+    conn = persistence.create_connection(db_path)
 
-    test.describe()
-
-    #%% encoding data
-
-    categorical_features = [1,3,5,6,7,8,9,13]
-    numerical_features = [0,2,4,10,11,12]
-    target_class = [14]
-
-    ct = ColumnTransformer([
-        ("categorical_onehot", OneHotEncoder(handle_unknown='ignore'), categorical_features),
-        ("numerical", MinMaxScaler(), numerical_features),
-        ("categorical_onehot_target", OneHotEncoder(handle_unknown='ignore'), target_class)
-        ])
-
-    parsed_train = ct.fit_transform(train)
-    parsed_test = ct.transform(test)
-
-    #%% X, y splitting
-    X_train = parsed_train[:,:-2]
-    y_train = parsed_train[:,-2:].todense()
-
-    X_test = parsed_test[:,:-2]
-    y_test = parsed_test[:,-2:].todense()
-
-    #%% baseline
-    test_loss, test_acc, test_pred = evaluate(X_train, X_test, y_train, y_test,
-                                    polluted_y_data=None,
-                                    loss_function=categorical_crossentropy,
-                                    traning_epochs=6)
-    print('Baseline test accuracy:', test_acc, test_pred)
-
-    baseline_result = test_acc
-
-
-    #%% pandas output dataframes
-
-    cols = ['fp_male', 'fn_male', 'fp_female', 'fn_female', 'loss', 'acc']
-    for i in range(y_test.shape[0]):
-        cols.append("pred%d" % i)
-        
-    baseline = pd.DataFrame(columns=cols)
-    two_step_forward_half = pd.DataFrame(columns=cols)
-    two_step_forward = pd.DataFrame(columns=cols)
-    alternating_forward_half = pd.DataFrame(columns=cols)
-    alternating_forward = pd.DataFrame(columns=cols)
+    # create sqlite tables
+    with conn:
+        persistence.create_nnar_table(conn, "baseline", y_test.shape[0])
+        persistence.create_nnar_table(conn, "two_step_forward_half", y_test.shape[0])
+        persistence.create_nnar_table(conn, "two_step_forward", y_test.shape[0])
+        persistence.create_nnar_table(conn, "alternating_forward_half", y_test.shape[0])
+        persistence.create_nnar_table(conn, "alternating_forward", y_test.shape[0])
 
     fps_male = np.arange(0, 0.55, 0.1)
     fns_male = np.arange(0, 0.55, 0.1)
@@ -258,102 +335,11 @@ def main():
         for fn_male in fns_male:
             for fp_female in fps_female:
                 for fn_female in fns_female:
-
-                    #%% nnar noise
-                    T_male = np.array([[1-fp_male, fp_male],
-                                    [ fn_male , 1-fn_male]]).astype(np.float32)
-
-                    T_female = np.array([[1-fp_female, fp_female],
-                                        [ fn_female , 1-fn_female]]).astype(np.float32)
-
-                    forward_male_loss = forward_categorical_crossentropy(T_male)
-                    forward_female_loss = forward_categorical_crossentropy(T_female)
-
-                    # indentifying males and females
-                    train_male = train[train.sex == "Male"]
-                    train_female = train[train.sex == "Female"]
-
-                    parsed_train_male = ct.transform(train_male)
-                    parsed_train_female = ct.transform(train_female)
-
-                    X_train_male = parsed_train_male[:,:-2].todense()
-                    y_train_male = parsed_train_male[:,-2:].todense()
-
-                    X_train_female = parsed_train_female[:,:-2].todense()
-                    y_train_female = parsed_train_female[:,-2:].todense()
-
-                    polluted_male_labels = pollute(y_train_male, T_male)
-                    polluted_female_labels = pollute(y_train_female, T_female)
-
-                    X_train = np.vstack([X_train_male, X_train_female])
-                    polluted_labels = np.vstack([polluted_male_labels, polluted_female_labels])
-
-                    #%%
-
-                    # polluted data without forward
-                    test_loss, test_acc, test_pred = evaluate(X_train, X_test, y_train, y_test,
-                                                    polluted_y_data=polluted_labels,
-                                                    loss_function=categorical_crossentropy,
-                                                    traning_epochs=6)
-                    append_result(baseline,
-                                    [fp_male, fn_male, fp_female, fn_female, test_loss, test_acc], 
-                                    test_pred)
-                    baseline.to_csv(os.path.join(directory,"baseline.csv"))
-                    #%%
-
-                    # polluted data with two step forward on half epochs
-                    test_loss, test_acc, test_pred = two_step_evaluate(X_train_female, polluted_female_labels,
-                                                            X_train_male, polluted_male_labels,
-                                                            X_test,y_test, 
-                                                            model_function=create_model,
-                                                            traning_epochs=3,
-                                                            loss_function_1st=forward_female_loss,
-                                                            loss_function_2nd=forward_male_loss)
-                    append_result(two_step_forward_half,
-                                    [fp_male, fn_male, fp_female, fn_female, test_loss, test_acc], 
-                                    test_pred)
-                    two_step_forward_half.to_csv(os.path.join(directory,"two_step_forward_half.csv"))
-                    #%%
-
-                    # polluted data with two step forward
-                    test_loss, test_acc, test_pred = two_step_evaluate(X_train_female, polluted_female_labels,
-                                                            X_train_male, polluted_male_labels,
-                                                            X_test,y_test, 
-                                                            model_function=create_model,
-                                                            traning_epochs=6,
-                                                            loss_function_1st=forward_female_loss,
-                                                            loss_function_2nd=forward_male_loss)
-                    append_result(two_step_forward,
-                                    [fp_male, fn_male, fp_female, fn_female, test_loss, test_acc], 
-                                    test_pred)
-                    two_step_forward.to_csv(os.path.join(directory,"two_step_forward.csv"))
-                    #%%
-
-                    # polluted data with alternating forward on half epochs
-                    test_loss, test_acc, test_pred = alternating_evaluate(X_train_female, polluted_female_labels,
-                                                            X_train_male, polluted_male_labels,
-                                                            X_test,y_test, 
-                                                            model_function=create_model,
-                                                            traning_epochs=3,
-                                                            loss_function_1st=forward_female_loss,
-                                                            loss_function_2nd=forward_male_loss)
-                    append_result(alternating_forward_half,
-                                    [fp_male, fn_male, fp_female, fn_female, test_loss, test_acc], 
-                                    test_pred)
-                    alternating_forward_half.to_csv(os.path.join(directory,"alternating_forward_half.csv"))
-
-                    # polluted data with alternating forward
-                    test_loss, test_acc, test_pred = alternating_evaluate(X_train_female, polluted_female_labels,
-                                                            X_train_male, polluted_male_labels,
-                                                            X_test,y_test, 
-                                                            model_function=create_model,
-                                                            traning_epochs=6,
-                                                            loss_function_1st=forward_female_loss,
-                                                            loss_function_2nd=forward_male_loss)
-                    append_result(alternating_forward,
-                                    [fp_male, fn_male, fp_female, fn_female, test_loss, test_acc], 
-                                    test_pred)
-                    alternating_forward.to_csv(os.path.join(directory,"alternating_forward.csv"))
+                    eval_noise_level(db_path, X_train_male, y_train_male,
+                        X_train_female, y_train_female, 
+                        X_test, y_test, 
+                        fp_male, fn_male, fp_female, fn_female)
+                    
 
 if __name__ == "__main__":
     main()

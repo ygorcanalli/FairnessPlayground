@@ -65,8 +65,12 @@ def persist_nnar(conn, table_name, pred_size, values):
         sql = sql + ",?"
 
     sql = sql + ");"
-    cur = conn.cursor()
-    cur.execute(sql, values)
+
+    try:
+        cur = conn.cursor()
+        cur.execute(sql, values)
+    except Error as e:
+        print(e)
 
 def load_table(conn, table_name):
     """
