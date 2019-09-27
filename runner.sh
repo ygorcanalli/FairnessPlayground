@@ -2,7 +2,7 @@
 # -------------------------------------------------------
 #  find last created directory: format NNNN
 # -------------------------------------------------------
-pythonpath="~/anaconda3/bin/python"
+pythonpath="python"
 basedir="results"
 mkdir -p $basedir
 cd $basedir
