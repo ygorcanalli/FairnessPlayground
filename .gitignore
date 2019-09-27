@@ -1,2 +1,6 @@
 .ipynb_checkpoints/
+results
 forward.log
+venv
+.vscode
+pycache
