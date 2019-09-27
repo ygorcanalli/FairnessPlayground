@@ -1,6 +1,5 @@
 .ipynb_checkpoints/
-results
-forward.log
-venv
-.vscode
-pycache
+results/
+venv/
+__pycache__/
+.vscode/settings.json
