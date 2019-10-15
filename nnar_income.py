@@ -8,6 +8,7 @@ from pprint import pprint
 import getopt, sys
 import persistence
 import logging
+import gc
 
 # default gpu to 0
 import os
@@ -30,6 +31,39 @@ num_cpus = psutil.cpu_count(logical=False)
 from joblib import parallel_backend
 from joblib import Parallel, delayed
 from joblib import wrap_non_picklable_objects
+
+#%%
+
+import linecache
+import os
+import tracemalloc
+
+def display_top(snapshot, key_type='lineno', limit=10):
+    snapshot = snapshot.filter_traces((
+        tracemalloc.Filter(False, "<frozen importlib._bootstrap>"),
+        tracemalloc.Filter(False, "<unknown>"),
+    ))
+    top_stats = snapshot.statistics(key_type)
+
+    logging.info("Top %s lines" % limit)
+    for index, stat in enumerate(top_stats[:limit], 1):
+        frame = stat.traceback[0]
+        # replace "/path/to/module/file.py" with "module/file.py"
+        filename = os.sep.join(frame.filename.split(os.sep)[-2:])
+        logging.info("#%s: %s:%s: %.1f KiB"
+              % (index, filename, frame.lineno, stat.size / 1024))
+        line = linecache.getline(frame.filename, frame.lineno).strip()
+        if line:
+            logging.info('    %s' % line)
+
+    other = top_stats[limit:]
+    if other:
+        size = sum(stat.size for stat in other)
+        logging.info("%s other: %.1f KiB" % (len(other), size / 1024))
+    total = sum(stat.size for stat in top_stats)
+    logging.info("Total allocated size: %.1f KiB" % (total / 1024))
+
+tracemalloc.start()
 
 #%% specifying model
 
@@ -83,6 +117,20 @@ def pollute(data, T):
                 polluted_data[i,1] = 0
                 polluted_data[i,0] = 1
     return polluted_data
+
+def worker(db_path,\
+            X_train_male, y_train_male,\
+            X_train_female, y_train_female,\
+            X_test, y_test,\
+            fp_male, fn_male, fp_female, fn_female, epochs):
+    evaluater = Evaluater(db_path,\
+                            X_train_male, y_train_male,\
+                            X_train_female, y_train_female,\
+                            X_test, y_test,\
+                            fp_male, fn_male, fp_female, fn_female, epochs)
+    del evaluater
+    _ = gc.collect()
+
 #%% evaluater
 
 class Evaluater(object):
@@ -145,6 +193,10 @@ class Evaluater(object):
         self.persist_results()
 
         logging.info("[%.1f,%.1f,%.1f,%.1f] I am done! " % (fp_male, fn_male, fp_female, fn_female) )
+
+        #snapshot = tracemalloc.take_snapshot()
+        #display_top(snapshot)
+        del self
     
     def persist_results(self):
         conn = persistence.create_connection(self.db_path)
@@ -227,6 +279,12 @@ class Evaluater(object):
         return float(loss), float(acc), pred
       
 #%%
+def chunks(l, n):
+    """Yield successive n-sized chunks from l."""
+    for i in range(0, len(l), n):
+        yield l[i:i + n]
+
+#%%
 def load_data():
     train = pd.read_csv("income/adult_treinamento2.csv")
     test = pd.read_csv("income/adult_teste2.csv")
@@ -263,7 +321,8 @@ def load_data():
     y_train_female = parsed_train_female[:,-2:].todense()
 
     return X_train_male, y_train_male, X_train_female, y_train_female, X_test, y_test
-#%%
+
+#%% main
 def main():
 
     try:
@@ -314,13 +373,15 @@ def main():
 
     epochs = 6
 
-    with parallel_backend('loky'):
-        Parallel(n_jobs=num_cpus)(delayed(Evaluater)(db_path,\
-                            X_train_male, y_train_male,\
-                            X_train_female, y_train_female,\
-                            X_test, y_test,\
-                            fp_male, fn_male, fp_female, fn_female, epochs)\
-                                for fp_male, fn_male, fp_female, fn_female in error_rates)
+    with parallel_backend('multiprocessing'):
+        for chunck in chunks(error_rates, 8):    
+            results = Parallel(n_jobs=8)(delayed(worker)(db_path,\
+                                X_train_male, y_train_male,\
+                                X_train_female, y_train_female,\
+                                X_test, y_test,\
+                                fp_male, fn_male, fp_female, fn_female, epochs)\
+                                    for fp_male, fn_male, fp_female, fn_female in chunck)
+            results = None                                    
 
 if __name__ == "__main__":
     main()

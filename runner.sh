@@ -29,3 +29,4 @@ echo "Current commit: $(git rev-parse HEAD)" >> $infofile
 echo "Diff to commit: $(git diff)" >> $infofile
 
 eval "nohup $pythonpath ${@} --directory=$basedir/$newdir >> $logfile 1>> $logfile 2>> $logfile &"
+tail -f $logfile
