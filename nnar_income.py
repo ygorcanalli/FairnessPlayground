@@ -256,8 +256,8 @@ def eval_noise_level(db_path, X_train_male, y_train_male,
         persistence.persist_nnar(conn, "alternating_forward", alternating_forward_result)
 #%%
 def load_data():
-    train = pd.read_csv("income/adult_treinamento2.csv")
-    test = pd.read_csv("income/adult_teste2.csv")
+    train = pd.read_csv("income/adult.data")
+    test = pd.read_csv("income/adult.test")
     # encoding data
 
     categorical_features = [1,3,5,6,7,8,9,13]

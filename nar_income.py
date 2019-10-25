@@ -123,8 +123,8 @@ def main():
         else:
             assert False, "unhaldled option"
 
-    train = pd.read_csv("income/adult_treinamento2.csv")
-    test = pd.read_csv("income/adult_teste2.csv")
+    train = pd.read_csv("income/adult.data")
+    test = pd.read_csv("income/adult.test")
 
     for k in test.keys():
         categories = test[k].value_counts()
