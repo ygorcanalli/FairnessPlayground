@@ -18,7 +18,6 @@ import os
 # importing tf and keras
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.backend import dot, transpose, categorical_crossentropy
 
 #%% seeding random
@@ -31,39 +30,6 @@ num_cpus = psutil.cpu_count(logical=False)
 from joblib import parallel_backend
 from joblib import Parallel, delayed
 from joblib import wrap_non_picklable_objects
-
-#%%
-
-import linecache
-import os
-import tracemalloc
-
-def display_top(snapshot, key_type='lineno', limit=10):
-    snapshot = snapshot.filter_traces((
-        tracemalloc.Filter(False, "<frozen importlib._bootstrap>"),
-        tracemalloc.Filter(False, "<unknown>"),
-    ))
-    top_stats = snapshot.statistics(key_type)
-
-    logging.info("Top %s lines" % limit)
-    for index, stat in enumerate(top_stats[:limit], 1):
-        frame = stat.traceback[0]
-        # replace "/path/to/module/file.py" with "module/file.py"
-        filename = os.sep.join(frame.filename.split(os.sep)[-2:])
-        logging.info("#%s: %s:%s: %.1f KiB"
-              % (index, filename, frame.lineno, stat.size / 1024))
-        line = linecache.getline(frame.filename, frame.lineno).strip()
-        if line:
-            logging.info('    %s' % line)
-
-    other = top_stats[limit:]
-    if other:
-        size = sum(stat.size for stat in other)
-        logging.info("%s other: %.1f KiB" % (len(other), size / 1024))
-    total = sum(stat.size for stat in top_stats)
-    logging.info("Total allocated size: %.1f KiB" % (total / 1024))
-
-tracemalloc.start()
 
 #%% specifying model
 
@@ -173,12 +139,12 @@ class Evaluater(object):
         male_loss = forward_categorical_crossentropy(self.T_male)
         female_loss = forward_categorical_crossentropy(self.T_female)
         
-        # testing with non polluted data
+        # testing without correction
         test_loss, test_acc, test_pred = self.baseline()
         self.baseline_result = [test_loss, test_acc]
         self.baseline_pred = test_pred
         #logging.info("[%.1f,%.1f,%.1f,%.1f] Baseline: %f" % (self.fp_male, self.fn_male, self.fp_female, self.fn_female, test_acc))
-
+        
         # polluted data with two step forward
         test_loss, test_acc, test_pred = self.two_step_evaluate(male_loss, female_loss)
         self.two_step_forward_result = [test_loss, test_acc]
@@ -191,11 +157,8 @@ class Evaluater(object):
         self.alternating_forward_pred = test_pred
         #logging.info("[%.1f,%.1f,%.1f,%.1f] Alternating forward: %f" % (self.fp_male, self.fn_male, self.fp_female, self.fn_female, test_acc) )
         self.persist_results()
-
+        
         logging.info("[%.1f,%.1f,%.1f,%.1f] I am done! " % (fp_male, fn_male, fp_female, fn_female) )
-
-        #snapshot = tracemalloc.take_snapshot()
-        #display_top(snapshot)
         del self
     
     def persist_results(self):
@@ -269,7 +232,7 @@ class Evaluater(object):
                     loss=categorical_crossentropy,
                     metrics=['accuracy'])
 
-        model.fit(self.X_train, self.y_train, epochs=self.training_epochs, verbose=0)
+        model.fit(self.X_train, self.polluted_labels, epochs=self.training_epochs, verbose=0)
 
         # testing with non polluted data
         loss, acc = model.evaluate(self.X_test, self.y_test, verbose=0)
@@ -372,10 +335,11 @@ def main():
                     error_rates.append( (fp_male, fn_male, fp_female, fn_female) )
 
     epochs = 6
+    n_jobs = 8
 
     with parallel_backend('multiprocessing'):
-        for chunck in chunks(error_rates, 8):    
-            results = Parallel(n_jobs=8)(delayed(worker)(db_path,\
+        for chunck in chunks(error_rates, n_jobs):    
+            results = Parallel(n_jobs=n_jobs)(delayed(worker)(db_path,\
                                 X_train_male, y_train_male,\
                                 X_train_female, y_train_female,\
                                 X_test, y_test,\

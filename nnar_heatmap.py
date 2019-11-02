@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import matplotlib
 import matplotlib.pyplot as plt
+import sqlite3
 # sphinx_gallery_thumbnail_number = 2
 
 #%%
@@ -12,9 +13,8 @@ male_fn_rates = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
 female_fp_rates = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
 female_fn_rates = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
 
-baseline = pd.read_csv("results/0006/baseline.csv", delimiter=",")
-alternating_forward_half = pd.read_csv("results/0006/baseline.csv", delimiter=",")
 #%%
+
 
 def get_heatmap_data(df, fp_male, fn_male):
         data = np.zeros( (len(female_fp_rates), len(female_fn_rates)) )
@@ -55,6 +55,15 @@ def plot_heatmap(data, title, color_map=plt.cm.Reds, vmin=None, vmax=None):
         fig.tight_layout()
         plt.show()
         fig.savefig(title+".pdf", bbox_inches='tight')
+
+#%%
+
+# Read sqlite query results into a pandas DataFrame
+con = sqlite3.connect("results/0006/result.db")
+baseline = pd.read_sql_query("SELECT * from baseline", con)
+alternating_forward = pd.read_sql_query("SELECT * from alternating_forward", con)
+two_step_forward = pd.read_sql_query("SELECT * from two_step_forward", con)
+con.close()
 
 #%%
 plot_heatmap(baseline, "Baseline error rate", vmin=0, vmax=0.6)

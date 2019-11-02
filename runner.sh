@@ -11,7 +11,7 @@ cd ..
 # -------------------------------------------------------
 #  create new sequential directory
 # -------------------------------------------------------
-next=$((++lastdir))
+next=$((10#$lastdir + 1))
 newdir=$(printf "%04u" $next)
 mkdir $basedir/$newdir
 
