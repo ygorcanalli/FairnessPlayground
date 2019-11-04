@@ -11,8 +11,8 @@ from pprint import pprint
 
 #%% load data
 
-train = pd.read_csv("income/adult_treinamento2.csv")
-test = pd.read_csv("income/adult_teste2.csv")
+train = pd.read_csv("income/adult.data")
+test = pd.read_csv("income/adult.test")
 # encoding data
 
 categorical_features = [1,3,5,6,7,8,9,13]
@@ -70,10 +70,10 @@ def pollute(data, sex, T_male, T_female):
 #%% polluting data 
 
 
-fp_female = 0.0
-fn_female = 0.0
-fp_male = 0.0
-fn_male = 0.0
+fp_female = 0.4
+fn_female = 0.4
+fp_male = 0.4
+fn_male = 0.4
         
 T_male = np.array([[1-fp_male, fp_male],
                 [ fn_male , 1-fn_male]]).astype(np.float32)
