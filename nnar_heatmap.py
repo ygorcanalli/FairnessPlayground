@@ -14,7 +14,7 @@ def get_heatmap_data(df, fp_male, fn_male, female_fp_rates, female_fn_rates):
                              (df.fn_male==fn_male),
                              ['fp_female', 'fn_female', 'test_acc']
                         ]
-        female_acc = female_df.sort_values(by=['fp_female', 'fn_female']).test_acc.as_matrix()
+        female_acc = female_df.sort_values(by=['fp_female', 'fn_female']).test_acc.values
 
         heatmap_data = female_acc.reshape( (female_fp_rates.shape[0], female_fn_rates.shape[0]) )
         return heatmap_data
@@ -51,30 +51,41 @@ def plot_heatmap_ax(ax, data, fp_male, fn_male, female_fp_rates, female_fn_rates
 
 #%%
 
-def plot_heatmap(data, title, color_map=plt.cm.Reds, vmin=None, vmax=None):
-        
+def plot_heatmap(data, title, difference_to=None, color_map=plt.cm.Reds_r, vmin=None, vmax=None):
         male_fp_rates = data.fp_male.sort_values().unique()
         male_fn_rates = data.fn_male.sort_values().unique()
         female_fp_rates = data.fp_female.sort_values().unique()
         female_fn_rates = data.fn_female.sort_values().unique()
 
+               #fig.tight_layout()
         #fig = plt.figure(figsize=(180,180)) 
         plt.figure(figsize = (male_fn_rates.shape[0], male_fp_rates.shape[0]))
-        fig, axs = plt.subplots(male_fn_rates.shape[0], male_fp_rates.shape[0], sharex='col', sharey='row',
-                                gridspec_kw={'hspace': 0, 'wspace': 0})
+        fig, axs = plt.subplots(male_fn_rates.shape[0], male_fp_rates.shape[0], sharex='col', 
+                                sharey='row', gridspec_kw={'hspace': 0, 'wspace': 0})
         for i, ax_row in enumerate(axs):
                 for j, ax in enumerate(ax_row):
-                        heatmap_data = get_heatmap_data(data, male_fp_rates[i], male_fn_rates[j], female_fp_rates, female_fn_rates)
-                        plot_heatmap_ax(ax, heatmap_data, male_fp_rates[i], male_fn_rates[j], female_fp_rates, female_fn_rates, title, color_map=color_map, vmin=vmin, vmax=vmax)
+                        heatmap_data = get_heatmap_data(data, male_fp_rates[i], male_fn_rates[j],
+                                                        female_fp_rates, female_fn_rates)
+                        if difference_to is not None:
+                                diff_heatmap_data = get_heatmap_data(difference_to, male_fp_rates[i],
+                                                        male_fn_rates[j], female_fp_rates, female_fn_rates)
+                                difference = (heatmap_data - diff_heatmap_data)/diff_heatmap_data
+                                plot_heatmap_ax(ax, difference, male_fp_rates[i], male_fn_rates[j], 
+                                                        female_fp_rates, female_fn_rates, title, 
+                                                        color_map=color_map, vmin=vmin, vmax=vmax)                              
+                        else:
+                                plot_heatmap_ax(ax, heatmap_data, male_fp_rates[i], male_fn_rates[j], 
+                                                female_fp_rates, female_fn_rates, title,
+                                                color_map=color_map, vmin=vmin, vmax=vmax)
 
-        #fig.tight_layout()
+        fig.subplots_adjust(wspace=0, hspace=0)
+        fig.suptitle(title, fontsize=16)
         for ax in axs.flat:
                 ax.label_outer()
                 ax.set_aspect('equal')
-
-        fig.subplots_adjust(wspace=0, hspace=0)
                 
         plt.show()
+                
         fig.savefig(title+".pdf", bbox_inches='tight')
 
 #%%
@@ -92,17 +103,17 @@ male_fn_rates = baseline.fn_male.sort_values().unique()
 female_fp_rates = baseline.fp_female.sort_values().unique()
 female_fn_rates = baseline.fn_female.sort_values().unique()
 
-baseline_heatmap_data = get_heatmap_data(baseline,male_fp_rates[0], male_fn_rates[0], female_fp_rates, female_fn_rates)
-alternating_forward_heatmap_data = get_heatmap_data(alternating_forward,male_fp_rates[0], male_fn_rates[0], female_fp_rates, female_fn_rates)
-two_step_forward_heatmap_data = get_heatmap_data(two_step_forward,male_fp_rates[0], male_fn_rates[0], female_fp_rates, female_fn_rates)
-
-alternating_forward_improvement = (alternating_forward_heatmap_data - baseline_heatmap_data)/baseline_heatmap_data
-two_step_forward_improvement = (two_step_forward_heatmap_data - baseline_heatmap_data)/baseline_heatmap_data
-
-plot_heatmap(baseline_heatmap_data, female_fp_rates, female_fn_rates, "Baseline error rate", vmin=0, vmax=0.6)
-plot_heatmap(alternating_forward_heatmap_data, female_fp_rates, female_fn_rates, "Alternating forward error rate", vmin=0, vmax=0.6)
-plot_heatmap(alternating_forward_improvement, female_fp_rates, female_fn_rates, "Alternating forward improvement", vmin=0, vmax=0.6)
-plot_heatmap(two_step_forward_heatmap_data, female_fp_rates, female_fn_rates, "Two step forward error rate", vmin=0, vmax=0.6)
-plot_heatmap(two_step_forward_improvement, female_fp_rates, female_fn_rates, "Two step forward improvement", vmin=0, vmax=0.6)
+plot_heatmap(baseline, "Baseline accuracy",
+                vmin=0,vmax=1)
+plot_heatmap(alternating_forward, "Alternating forward accuracy",
+                vmin=0,vmax=1)
+plot_heatmap(alternating_forward, "Alternating forward improvement", 
+                difference_to=baseline, color_map=plt.cm.RdBu,
+                vmin=-2,vmax=2)
+plot_heatmap(two_step_forward, "Two step forward accuracy",
+                vmin=0,vmax=1)
+plot_heatmap(two_step_forward, "Two step forward improvement", 
+                difference_to=baseline, color_map=plt.cm.RdBu,
+                vmin=-2,vmax=2)
 
 #%%
