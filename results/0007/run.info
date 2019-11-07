@@ -1,0 +1,92 @@
+Command: ./runner.sh nnar_income.py
+Directory: 
+Date: ter nov  5 14:03:26 -03 2019
+Current commit: fbaca269b5a3d67b7b2f2c7201acd577ef258c0f
+Diff to commit: diff --git a/nnar_income.py b/nnar_income.py
+index 7a93324..4c8db31 100644
+--- a/nnar_income.py
++++ b/nnar_income.py
+@@ -101,14 +101,14 @@ def worker(db_path,\
+ 
+ class Evaluater(object):
+ 
+-    def __init__(self, db_path, X_train_male, y_train_male,\
++    def __init__(self, directory, X_train_male, y_train_male,\
+                             X_train_female, y_train_female, \
+                             X_test, y_test,\
+                             fp_male, fn_male, fp_female, fn_female,\
+                             training_epochs):
+         logging.info("[%.1f,%.1f,%.1f,%.1f] I am alive! " % (fp_male, fn_male, fp_female, fn_female) )    
+                              
+-        self.db_path = db_path
++        self.directory = directory
+         self.training_epochs = training_epochs
+         self.fp_male = fp_male
+         self.fn_male = fn_male
+@@ -162,12 +162,20 @@ class Evaluater(object):
+         del self
+     
+     def persist_results(self):
+-        conn = persistence.create_connection(self.db_path)
++        db_path = os.path.join(self.directory, "baseline.db")
++        conn = persistence.create_connection(db_path)
++        with conn:
++            persistence.persist_nnar(conn, "result", self.error_rates + self.baseline_result, self.baseline_pred)
+         
++        db_path = os.path.join(self.directory, "two_step_forward.db")
++        conn = persistence.create_connection(db_path)
++        with conn:
++            persistence.persist_nnar(conn, "result", self.error_rates + self.two_step_forward_result, self.two_step_forward_pred)
++
++        db_path = os.path.join(self.directory, "alternating_forward.db")
++        conn = persistence.create_connection(db_path)
+         with conn:
+-            persistence.persist_nnar(conn, "baseline", self.error_rates + self.baseline_result, self.baseline_pred)
+-            persistence.persist_nnar(conn, "two_step_forward", self.error_rates + self.two_step_forward_result, self.two_step_forward_pred)
+-            persistence.persist_nnar(conn, "alternating_forward", self.error_rates + self.alternating_forward_result, self.alternating_forward_pred)
++            persistence.persist_nnar(conn, "result", self.error_rates + self.alternating_forward_result, self.alternating_forward_pred)
+ 
+     def two_step_evaluate(self, male_loss, female_loss):
+ 
+@@ -311,16 +319,28 @@ def main():
+     X_train_male, y_train_male, X_train_female, y_train_female, X_test, y_test = load_data()
+ 
+     # creating sqlite database
+-    db_path = os.path.join(directory, "result.db")
++    
+     log_path = os.path.join(directory, "nohup.out")
+     logging.basicConfig(filename=log_path,level=logging.DEBUG)
++    
++    db_path = os.path.join(directory, "baseline.db")
+     conn = persistence.create_connection(db_path)
+ 
+     # create sqlite tables
++    db_path = os.path.join(directory, "baseline.db")
++    conn = persistence.create_connection(db_path)
++    with conn:
++        persistence.create_nnar_table(conn, "result")
++    
++    db_path = os.path.join(directory, "two_step_forward.db")
++    conn = persistence.create_connection(db_path)
++    with conn:
++        persistence.create_nnar_table(conn, "result")
++    
++    db_path = os.path.join(directory, "alternating_forward.db")
++    conn = persistence.create_connection(db_path)
+     with conn:
+-        persistence.create_nnar_table(conn, "baseline")
+-        persistence.create_nnar_table(conn, "two_step_forward")
+-        persistence.create_nnar_table(conn, "alternating_forward")
++        persistence.create_nnar_table(conn, "result")
+ 
+     fps_male = [0, 0.1, 0.2, 0.3, 0.4, 0.5]
+     fns_male = [0, 0.1, 0.2, 0.3, 0.4, 0.5]
+@@ -339,7 +359,7 @@ def main():
+ 
+     with parallel_backend('multiprocessing'):
+         for chunck in chunks(error_rates, n_jobs):    
+-            results = Parallel(n_jobs=n_jobs)(delayed(worker)(db_path,\
++            results = Parallel(n_jobs=n_jobs)(delayed(worker)(directory,\
+                                 X_train_male, y_train_male,\
+                                 X_train_female, y_train_female,\
+                                 X_test, y_test,\
