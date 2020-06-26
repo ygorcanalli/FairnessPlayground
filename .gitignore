@@ -1,5 +1,6 @@
 .ipynb_checkpoints/
 *.db
 venv/
+results/
 __pycache__/
 .vscode/settings.json
