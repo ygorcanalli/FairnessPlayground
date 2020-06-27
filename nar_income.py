@@ -22,8 +22,8 @@ from keras.backend import dot, transpose, categorical_crossentropy
 
 from numpy.random import seed
 seed(1)
-from tensorflow import set_random_seed
-set_random_seed(1)
+from tensorflow.random import set_seed
+set_seed(1)
 
 #%% specifying model
 
@@ -126,12 +126,12 @@ def main():
     train = pd.read_csv("income/adult.data")
     test = pd.read_csv("income/adult.test")
 
-    for k in test.keys():
-        categories = test[k].value_counts()
-        print(categories)
-        print("\n")
+    #for k in test.keys():
+    #    categories = test[k].value_counts()
+    #    print(categories)
+    #    print("\n")
 
-    test.describe()
+    #test.describe()
 
     #%% encoding data
 
@@ -149,10 +149,10 @@ def main():
     test = ct.transform(test)
 
     #%% X, y splitting
-    X_train = train[:,:-2]
+    X_train = train[:,:-2].todense()
     y_train = train[:,-2:].todense()
 
-    X_test = test[:,:-2]
+    X_test = test[:,:-2].todense()
     y_test = test[:,-2:].todense()
 
 
@@ -180,7 +180,7 @@ def main():
 
             polluted_labels = pollute(y_train, T)
             forward_loss = forward_categorical_crossentropy(T)
-            backward_loss = backward_categorical_crossentropy(T)
+            #backward_loss = backward_categorical_crossentropy(T)
 
             # polluted data without forward
             test_loss, test_acc = evaluate(X_train, X_test, y_train, y_test,
@@ -197,11 +197,11 @@ def main():
             forward_results[i,j] = test_acc
 
             # polluted data with backward
-            test_loss, test_acc = evaluate(X_train, X_test, y_train, y_test,
-                                            polluted_y_data=polluted_labels,
-                                            loss_function=backward_loss)
-            print('Test accuracy with backward:', test_acc)
-            backward_results[i,j] = test_acc
+            #test_loss, test_acc = evaluate(X_train, X_test, y_train, y_test,
+            #                               polluted_y_data=polluted_labels,
+            #                                loss_function=backward_loss)
+            #print('Test accuracy with backward:', test_acc)
+            #backward_results[i,j] = test_acc
 
     print('Baseline test accuracy:', baseline_result)
     print("Results without forward:")
@@ -211,8 +211,8 @@ def main():
     pprint(forward_results)
     np.savetxt(os.path.join(directory,"forward.csv"), forward_results, delimiter=",")
     print("Results with backward:")
-    pprint(backward_results)
-    np.savetxt(os.path.join(directory,"backward.csv"), backward_results, delimiter=",")
+    #pprint(backward_results)
+    #np.savetxt(os.path.join(directory,"backward.csv"), backward_results, delimiter=",")
     #%%
 
 if __name__ == "__main__":
