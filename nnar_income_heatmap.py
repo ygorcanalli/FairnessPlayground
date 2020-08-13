@@ -92,7 +92,7 @@ def plot_heatmap(data, title, difference_to=None, color_map=plt.cm.Reds, vmin=No
 
 #%%
 # Read sqlite query results into a pandas DataFrame
-directory = "results/0007"
+directory = "results/0001"
 db_path = os.path.join(directory, "baseline.db")
 conn = persistence.create_connection(db_path)
 with conn:
