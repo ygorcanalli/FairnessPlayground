@@ -37,11 +37,26 @@ def create_model():
     model = keras.Sequential([
         keras.layers.Flatten(input_shape=(108,)),
         keras.layers.Dense(128, activation=tf.nn.relu),
-        keras.layers.Dense(2, activation=tf.nn.softmax)
+        keras.layers.Dense(4, activation=tf.nn.softmax)
     ])
 
     return model
 #%% custom loss function for forward
+
+def weighted_categorical_crossentropy(T_male, T_female):
+
+    # Create a loss function that adds the MSE loss to the mean of all squared activations of a specific layer
+    def loss(y_true,y_pred):
+        male_pred = y_pred[:,0]
+        female_pred = y_pred[:,1]
+        resulting_T = male_pred * T_male + female_pred * T_female
+        y_pred_target = y_pred[:,:-2]
+        y_true_target = y_true[:,:-2]
+        pred = transpose(dot(transpose(resulting_T), transpose(y_pred_target)))
+        return categorical_crossentropy(y_true_target, pred)
+   
+    # Return a function
+    return loss
 
 def forward_categorical_crossentropy(T):
 
@@ -138,13 +153,14 @@ class Evaluater(object):
         
         male_loss = forward_categorical_crossentropy(self.T_male)
         female_loss = forward_categorical_crossentropy(self.T_female)
+        weighted_loss = weighted_categorical_crossentropy(self.T_male, self.T_female)
         
         # testing without correction
         test_loss, test_acc, test_pred = self.baseline()
         self.baseline_result = [test_loss, test_acc]
         self.baseline_pred = test_pred
         #logging.info("[%.1f,%.1f,%.1f,%.1f] Baseline: %f" % (self.fp_male, self.fn_male, self.fp_female, self.fn_female, test_acc))
-        
+        """
         # polluted data with two step forward
         test_loss, test_acc, test_pred = self.two_step_evaluate(male_loss, female_loss)
         self.two_step_forward_result = [test_loss, test_acc]
@@ -155,6 +171,11 @@ class Evaluater(object):
         test_loss, test_acc, test_pred = self.alternating_evaluate(male_loss, female_loss)
         self.alternating_forward_result = [test_loss, test_acc]
         self.alternating_forward_pred = test_pred
+        """
+        # polluted data with alternating forward
+        test_loss, test_acc, test_pred = self.weighted_evaluate(weighted_loss)
+        self.weighted_forward_result = [test_loss, test_acc]
+        self.weighted_forward_pred = test_pred
         #logging.info("[%.1f,%.1f,%.1f,%.1f] Alternating forward: %f" % (self.fp_male, self.fn_male, self.fp_female, self.fn_female, test_acc) )
         self.persist_results()
         
@@ -166,7 +187,7 @@ class Evaluater(object):
         conn = persistence.create_connection(db_path)
         with conn:
             persistence.persist_nnar(conn, "result", self.error_rates + self.baseline_result, self.baseline_pred)
-        
+        """
         db_path = os.path.join(self.directory, "two_step_forward.db")
         conn = persistence.create_connection(db_path)
         with conn:
@@ -176,6 +197,11 @@ class Evaluater(object):
         conn = persistence.create_connection(db_path)
         with conn:
             persistence.persist_nnar(conn, "result", self.error_rates + self.alternating_forward_result, self.alternating_forward_pred)
+        """
+        db_path = os.path.join(self.directory, "weighted_forward.db")
+        conn = persistence.create_connection(db_path)
+        with conn:
+            persistence.persist_nnar(conn, "result", self.error_rates + self.weighted_forward_result, self.weighted_forward_pred)
 
     def two_step_evaluate(self, male_loss, female_loss):
 
@@ -187,7 +213,7 @@ class Evaluater(object):
                     loss=female_loss,
                     metrics=['accuracy'])
 
-        model.fit(self.X_train_female, self.polluted_female_labels, epochs=self.training_epochs, verbose=0)
+        model.fit(self.X_train_female, self.polluted_female_labels, batch_size=1, epochs=self.training_epochs, verbose=0)
 
 
         # specifying optmizer, loss and metrics
@@ -195,14 +221,35 @@ class Evaluater(object):
                     loss=male_loss,
                     metrics=['accuracy'])
 
-        model.fit(self.X_train_male, self.polluted_male_labels, epochs=self.training_epochs, verbose=0)
+        model.fit(self.X_train_male, self.polluted_male_labels, batch_size=1, epochs=self.training_epochs, verbose=0)
 
         # testing with non polluted data
         loss, acc = model.evaluate(self.X_test, self.y_test, verbose=0)
-        pred = model.predict_classes(self.X_test)
+        
+        pred = np.argmax(model.predict(self.X_test), axis=-1)
 
         
         return float(loss), float(acc), pred
+
+    def weighted_evaluate(self, weighted_loss):
+
+        # initializing model
+        model = create_model()
+
+        # specifying optmizer, loss and metrics
+        model.compile(optimizer='adam', 
+                    loss=weighted_loss,
+                    metrics=['accuracy'])
+
+        model.fit(self.X_train, self.polluted_labels, batch_size=1, epochs=self.training_epochs, verbose=0)
+
+        # testing with non polluted data
+        loss, acc = model.evaluate(self.X_test, self.y_test, batch_size=1, verbose=0)
+        pred = np.argmax(model.predict(self.X_test), axis=-1)
+
+        
+        return float(loss), float(acc), pred
+
 
     def alternating_evaluate(self, male_loss, female_loss):
 
@@ -225,7 +272,7 @@ class Evaluater(object):
             model.fit(self.X_train_male, self.polluted_male_labels, epochs=1, verbose=0)
 
         loss, acc = model.evaluate(self.X_test, self.y_test, verbose=0)
-        pred = model.predict_classes(self.X_test)
+        pred = np.argmax(model.predict(self.X_test), axis=-1)
 
         # testing with non polluted data
         return float(loss), float(acc), pred
@@ -240,11 +287,11 @@ class Evaluater(object):
                     loss=categorical_crossentropy,
                     metrics=['accuracy'])
 
-        model.fit(self.X_train, self.polluted_labels, epochs=self.training_epochs, verbose=0)
+        model.fit(self.X_train, self.polluted_labels, batch_size=1, epochs=self.training_epochs, verbose=0)
 
         # testing with non polluted data
-        loss, acc = model.evaluate(self.X_test, self.y_test, verbose=0)
-        pred = model.predict_classes(self.X_test)
+        loss, acc = model.evaluate(self.X_test, self.y_test, batch_size=1, verbose=0)
+        pred = np.argmax(model.predict(self.X_test), axis=-1)
 
         
         return float(loss), float(acc), pred
@@ -263,7 +310,7 @@ def load_data():
 
     categorical_features = [1,3,5,6,7,8,9,13]
     numerical_features = [0,2,4,10,11,12]
-    target_class = [14]
+    target_class = [9,14]
 
     ct = ColumnTransformer([
         ("categorical_onehot", OneHotEncoder(handle_unknown='ignore'), categorical_features),
@@ -275,8 +322,8 @@ def load_data():
     parsed_test = ct.transform(test)
 
     # X_test, y_test splitting
-    X_test = parsed_test[:,:-2].todense()
-    y_test = parsed_test[:,-2:].todense()
+    X_test = parsed_test[:,:-4].todense()
+    y_test = parsed_test[:,-4:].todense()
 
     # indentifying males and females
     train_male = train[train.sex == "Male"]
@@ -285,11 +332,11 @@ def load_data():
     parsed_train_male = ct.transform(train_male)
     parsed_train_female = ct.transform(train_female)
 
-    X_train_male = parsed_train_male[:,:-2].todense()
-    y_train_male = parsed_train_male[:,-2:].todense()
+    X_train_male = parsed_train_male[:,:-4].todense()
+    y_train_male = parsed_train_male[:,-4:].todense()
 
-    X_train_female = parsed_train_female[:,:-2].todense()
-    y_train_female = parsed_train_female[:,-2:].todense()
+    X_train_female = parsed_train_female[:,:-4].todense()
+    y_train_female = parsed_train_female[:,-4:].todense()
 
     return X_train_male, y_train_male, X_train_female, y_train_female, X_test, y_test
 
@@ -332,6 +379,7 @@ def main():
     with conn:
         persistence.create_nnar_table(conn, "result")
     
+    """
     db_path = os.path.join(directory, "two_step_forward.db")
     conn = persistence.create_connection(db_path)
     with conn:
@@ -341,7 +389,13 @@ def main():
     conn = persistence.create_connection(db_path)
     with conn:
         persistence.create_nnar_table(conn, "result")
+    """
 
+    db_path = os.path.join(directory, "weighted_forward.db")
+    conn = persistence.create_connection(db_path)
+    with conn:
+        persistence.create_nnar_table(conn, "result")
+        
     fps_male = [0, 0.1, 0.2, 0.3, 0.4, 0.5]
     fns_male = [0, 0.1, 0.2, 0.3, 0.4, 0.5]
     fps_female = [0, 0.1, 0.2, 0.3, 0.4, 0.5]
