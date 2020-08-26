@@ -92,30 +92,37 @@ def plot_heatmap(directory, data, title, difference_to=None, color_map=plt.cm.Re
 
 #%%
 # Read sqlite query results into a pandas DataFrame
-directory = "results/0004"
+directory = "results/0001"
 db_path = os.path.join(directory, "baseline.db")
 conn = persistence.create_connection(db_path)
 with conn:
         baseline = pd.read_sql_query("SELECT * from result", conn)
 
 
-db_path = os.path.join(directory, "weighted_forward.db")
+db_path = os.path.join(directory, "two_step_forward.db")
 conn = persistence.create_connection(db_path)
 with conn:
-        weighted_forward = pd.read_sql_query("SELECT * from result", conn)
-#%%
+        two_step_forward = pd.read_sql_query("SELECT * from result", conn)
 
-male_fp_rates = baseline.fp_male.sort_values().unique()
-male_fn_rates = baseline.fn_male.sort_values().unique()
-female_fp_rates = baseline.fp_female.sort_values().unique()
-female_fn_rates = baseline.fn_female.sort_values().unique()
+
+db_path = os.path.join(directory, "alternating_forward.db")
+conn = persistence.create_connection(db_path)
+with conn:
+        alternating_forward = pd.read_sql_query("SELECT * from result", conn)
+#%%
 
 plot_heatmap(directory,baseline, "Baseline error rate",
                 vmin=0,vmax=0.6)
 
-plot_heatmap(directory,weighted_forward, "Weighted forward error rate",
+plot_heatmap(directory,alternating_forward, "Alternating forward error rate",
                 vmin=0,vmax=0.6)
-plot_heatmap(directory,weighted_forward, "weighted forward improvement", 
+plot_heatmap(directory,alternating_forward, "Alternating forward improvement", 
+                difference_to=baseline, color_map=plt.cm.RdBu,
+                vmin=-0.72,vmax=0.72)
+
+plot_heatmap(directory,two_step_forward, "Two step forward error rate",
+                vmin=0,vmax=0.6)
+plot_heatmap(directory,two_step_forward, "Two step forward improvement", 
                 difference_to=baseline, color_map=plt.cm.RdBu,
                 vmin=-0.72,vmax=0.72)
 
