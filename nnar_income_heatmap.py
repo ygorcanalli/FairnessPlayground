@@ -30,8 +30,8 @@ def plot_heatmap_ax(ax, data, fp_male, fn_male, female_fp_rates, female_fn_rates
         ax.set_xticks(np.arange(len(female_fp_rates)))
         ax.set_yticks(np.arange(len(female_fn_rates)))
         # ... and label them with the respective list entries
-        ax.set_xticklabels(["fp_female: %.1f" % fp for fp in female_fp_rates], fontsize=3, rotation=45)
-        ax.set_yticklabels(["fn_female: %.1f" % fn for fn in female_fn_rates], fontsize=3)
+        ax.set_xticklabels(["fp_female: %.1f" % fp for fp in female_fp_rates], fontsize=6, rotation=45)
+        ax.set_yticklabels(["fn_female: %.1f" % fn for fn in female_fn_rates], fontsize=6)
 
         ax.set_xlabel("fp_male: %.1f" % fp_male, fontsize=6)
         ax.set_ylabel("fn_male: %.1f" % fn_male, fontsize=6)
@@ -46,14 +46,14 @@ def plot_heatmap_ax(ax, data, fp_male, fn_male, female_fp_rates, female_fn_rates
         for i in range(len(female_fn_rates)):
                 for j in range(len(female_fp_rates)):
                         text = ax.text(j, i, "%.3f" % data[i, j] ,
-                                ha="center", va="center", color="black", fontsize=1)
+                                ha="center", va="center", color="black", fontsize=4)
 
         #ax.set_title(title)
 
 
 #%%
 
-def plot_heatmap(data, title, difference_to=None, color_map=plt.cm.Reds, vmin=None, vmax=None):
+def plot_heatmap(directory, data, title, difference_to=None, color_map=plt.cm.Reds, vmin=None, vmax=None):
         male_fp_rates = data.fp_male.sort_values().unique()
         male_fn_rates = data.fn_male.sort_values().unique()
         female_fp_rates = data.fp_female.sort_values().unique()
@@ -88,26 +88,21 @@ def plot_heatmap(data, title, difference_to=None, color_map=plt.cm.Reds, vmin=No
                 
         #plt.show()
                 
-        fig.savefig(title+".pdf", bbox_inches='tight')
+        fig.savefig(os.path.join(directory,title+".pdf"), bbox_inches='tight')
 
 #%%
 # Read sqlite query results into a pandas DataFrame
-directory = "results/0001"
+directory = "results/0004"
 db_path = os.path.join(directory, "baseline.db")
 conn = persistence.create_connection(db_path)
 with conn:
         baseline = pd.read_sql_query("SELECT * from result", conn)
 
-db_path = os.path.join(directory, "two_step_forward.db")
+
+db_path = os.path.join(directory, "weighted_forward.db")
 conn = persistence.create_connection(db_path)
 with conn:
-        two_step_forward = pd.read_sql_query("SELECT * from result", conn)
-
-db_path = os.path.join(directory, "alternating_forward.db")
-conn = persistence.create_connection(db_path)
-with conn:
-        alternating_forward = pd.read_sql_query("SELECT * from result", conn)
-
+        weighted_forward = pd.read_sql_query("SELECT * from result", conn)
 #%%
 
 male_fp_rates = baseline.fp_male.sort_values().unique()
@@ -115,16 +110,12 @@ male_fn_rates = baseline.fn_male.sort_values().unique()
 female_fp_rates = baseline.fp_female.sort_values().unique()
 female_fn_rates = baseline.fn_female.sort_values().unique()
 
-plot_heatmap(baseline, "Baseline error rate",
+plot_heatmap(directory,baseline, "Baseline error rate",
                 vmin=0,vmax=0.6)
-plot_heatmap(alternating_forward, "Alternating forward error rate",
+
+plot_heatmap(directory,weighted_forward, "Weighted forward error rate",
                 vmin=0,vmax=0.6)
-plot_heatmap(alternating_forward, "Alternating forward improvement", 
-                difference_to=baseline, color_map=plt.cm.RdBu,
-                vmin=-0.72,vmax=0.72)
-plot_heatmap(two_step_forward, "Two step forward error rate",
-                vmin=0,vmax=0.6)
-plot_heatmap(two_step_forward, "Two step forward improvement", 
+plot_heatmap(directory,weighted_forward, "weighted forward improvement", 
                 difference_to=baseline, color_map=plt.cm.RdBu,
                 vmin=-0.72,vmax=0.72)
 

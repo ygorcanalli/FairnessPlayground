@@ -2,7 +2,7 @@
 from __future__ import absolute_import, division, print_function
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, MinMaxScaler
+from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, MinMaxScaler, LabelBinarizer
 from sklearn.compose import ColumnTransformer
 from pprint import pprint
 import getopt, sys
@@ -18,7 +18,8 @@ import os
 # importing tf and keras
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras.backend import dot, transpose, categorical_crossentropy
+import tensorflow.keras.backend as K
+from tensorflow.keras.backend import dot, transpose, categorical_crossentropy, stack
 
 #%% seeding random
 np.random.seed(77)
@@ -37,23 +38,24 @@ def create_model():
     model = keras.Sequential([
         keras.layers.Flatten(input_shape=(108,)),
         keras.layers.Dense(128, activation=tf.nn.relu),
-        keras.layers.Dense(4, activation=tf.nn.softmax)
+        keras.layers.Dense(2, activation=tf.nn.softmax)
     ])
 
     return model
-#%% custom loss function for forward
 
 def weighted_categorical_crossentropy(T_male, T_female):
 
     # Create a loss function that adds the MSE loss to the mean of all squared activations of a specific layer
     def loss(y_true,y_pred):
-        male_pred = y_pred[:,0]
-        female_pred = y_pred[:,1]
-        resulting_T = male_pred * T_male + female_pred * T_female
-        y_pred_target = y_pred[:,:-2]
-        y_true_target = y_true[:,:-2]
-        pred = transpose(dot(transpose(resulting_T), transpose(y_pred_target)))
-        return categorical_crossentropy(y_true_target, pred)
+        T = K.stack([T_female.T, T_male.T])
+        y_sensitive = y_true[:,0:2]
+        y_true_target = y_true[:,-2:]
+        T_volume = tf.tensordot(y_sensitive, T, axes=1)
+       
+        y_pred_target_corrected = K.batch_dot(T_volume, y_pred)
+        #y_pred_corrected = K.concatenate([y_pred_sensitive,y_pred_target_corrected],axis=1)
+        
+        return categorical_crossentropy(y_true_target, y_pred_target_corrected)
    
     # Return a function
     return loss
@@ -68,24 +70,18 @@ def forward_categorical_crossentropy(T):
     # Return a function
     return loss
 
-#%% custom loss function for backward
 
-def backward_categorical_crossentropy(T):
-
-    # Create a loss function that adds the MSE loss to the mean of all squared activations of a specific layer
-    def loss(y_true,y_pred):
-        base_loss = categorical_crossentropy(y_true, y_pred)
-        return dot(np.linalg.pinv(T), base_loss)
-   
-    # Return a function
-    return loss
 
 #%% pollute
-def pollute(data, T):
+def pollute(sensitive, data, T_male, T_female):
     polluted_data = data.copy()
     for i in range(data.shape[0]):
         r = np.random.rand(1)
         # if class is 0
+        if sensitive[i,0] == 1:
+            T = T_female
+        elif sensitive[i,1] == 1:
+            T = T_male
         if data[i,0] == 1:       
             # probability of false positive
             if r < T[0,1]:
@@ -95,18 +91,16 @@ def pollute(data, T):
         elif data[i,1] == 1:
             # probability of false negative
             if r < T[1,0]:
-                polluted_data[i,1] = 0
                 polluted_data[i,0] = 1
+                polluted_data[i,1] = 0
     return polluted_data
 
 def worker(db_path,\
-            X_train_male, y_train_male,\
-            X_train_female, y_train_female,\
+            X_train, y_train,\
             X_test, y_test,\
             fp_male, fn_male, fp_female, fn_female, epochs):
     evaluater = Evaluater(db_path,\
-                            X_train_male, y_train_male,\
-                            X_train_female, y_train_female,\
+                            X_train, y_train,\
                             X_test, y_test,\
                             fp_male, fn_male, fp_female, fn_female, epochs)
     del evaluater
@@ -116,8 +110,7 @@ def worker(db_path,\
 
 class Evaluater(object):
 
-    def __init__(self, directory, X_train_male, y_train_male,\
-                            X_train_female, y_train_female, \
+    def __init__(self, directory, X_train, y_train,\
                             X_test, y_test,\
                             fp_male, fn_male, fp_female, fn_female,\
                             training_epochs):
@@ -131,10 +124,8 @@ class Evaluater(object):
         self.fn_female = fn_female
         
         self.error_rates = [self.fp_male, self.fn_male, self.fp_female, self.fn_female]
-        self.X_train_male = X_train_male
-        self.X_train_female = X_train_female
-        self.y_train_male = y_train_male
-        self.y_train_female = y_train_female
+        self.X_train = X_train
+        self.y_train = y_train
         self.X_test = X_test
         self.y_test = y_test
         
@@ -143,40 +134,29 @@ class Evaluater(object):
 
         self.T_female = np.array([[1-fp_female, fp_female],
                             [ fn_female , 1-fn_female]]).astype(np.float32)
+        """
+        self.T_male = np.array([[1 , 0],
+                                [0 , 1]]).astype(np.float32)
 
-        self.polluted_male_labels = pollute(self.y_train_male, self.T_male)
-        self.polluted_female_labels = pollute(self.y_train_female, self.T_female)
+        self.T_female = np.array([[1 , 0],
+                                  [0 , 1]]).astype(np.float32)
+        """
+        self.polluted_labels = pollute(self.X_train[:,-2:], self.y_train, self.T_male, self.T_female)
 
-        self.X_train = np.vstack([self.X_train_male, self.X_train_female])
-        self.y_train = np.vstack([self.y_train_male, self.y_train_female])
-        self.polluted_labels = np.vstack([self.polluted_male_labels, self.polluted_female_labels])
-        
-        male_loss = forward_categorical_crossentropy(self.T_male)
-        female_loss = forward_categorical_crossentropy(self.T_female)
         weighted_loss = weighted_categorical_crossentropy(self.T_male, self.T_female)
         
         # testing without correction
-        test_loss, test_acc, test_pred = self.baseline()
+        test_loss, test_acc, test_pred = self.baseline_evaluate()
         self.baseline_result = [test_loss, test_acc]
         self.baseline_pred = test_pred
-        #logging.info("[%.1f,%.1f,%.1f,%.1f] Baseline: %f" % (self.fp_male, self.fn_male, self.fp_female, self.fn_female, test_acc))
-        """
-        # polluted data with two step forward
-        test_loss, test_acc, test_pred = self.two_step_evaluate(male_loss, female_loss)
-        self.two_step_forward_result = [test_loss, test_acc]
-        self.two_step_forward_pred = test_pred
-        #logging.info("[%.1f,%.1f,%.1f,%.1f] Two step forward: %f" % (self.fp_male, self.fn_male, self.fp_female, self.fn_female, test_acc) )
 
         # polluted data with alternating forward
-        test_loss, test_acc, test_pred = self.alternating_evaluate(male_loss, female_loss)
-        self.alternating_forward_result = [test_loss, test_acc]
-        self.alternating_forward_pred = test_pred
-        """
-        # polluted data with alternating forward
+        
         test_loss, test_acc, test_pred = self.weighted_evaluate(weighted_loss)
         self.weighted_forward_result = [test_loss, test_acc]
         self.weighted_forward_pred = test_pred
         #logging.info("[%.1f,%.1f,%.1f,%.1f] Alternating forward: %f" % (self.fp_male, self.fn_male, self.fp_female, self.fn_female, test_acc) )
+        
         self.persist_results()
         
         logging.info("[%.1f,%.1f,%.1f,%.1f] I am done! " % (fp_male, fn_male, fp_female, fn_female) )
@@ -187,49 +167,12 @@ class Evaluater(object):
         conn = persistence.create_connection(db_path)
         with conn:
             persistence.persist_nnar(conn, "result", self.error_rates + self.baseline_result, self.baseline_pred)
-        """
-        db_path = os.path.join(self.directory, "two_step_forward.db")
-        conn = persistence.create_connection(db_path)
-        with conn:
-            persistence.persist_nnar(conn, "result", self.error_rates + self.two_step_forward_result, self.two_step_forward_pred)
-
-        db_path = os.path.join(self.directory, "alternating_forward.db")
-        conn = persistence.create_connection(db_path)
-        with conn:
-            persistence.persist_nnar(conn, "result", self.error_rates + self.alternating_forward_result, self.alternating_forward_pred)
-        """
+        
         db_path = os.path.join(self.directory, "weighted_forward.db")
         conn = persistence.create_connection(db_path)
         with conn:
             persistence.persist_nnar(conn, "result", self.error_rates + self.weighted_forward_result, self.weighted_forward_pred)
-
-    def two_step_evaluate(self, male_loss, female_loss):
-
-        # initializing model
-        model = create_model()
-
-        # specifying optmizer, loss and metrics
-        model.compile(optimizer='adam', 
-                    loss=female_loss,
-                    metrics=['accuracy'])
-
-        model.fit(self.X_train_female, self.polluted_female_labels, batch_size=1, epochs=self.training_epochs, verbose=0)
-
-
-        # specifying optmizer, loss and metrics
-        model.compile(optimizer='adam', 
-                    loss=male_loss,
-                    metrics=['accuracy'])
-
-        model.fit(self.X_train_male, self.polluted_male_labels, batch_size=1, epochs=self.training_epochs, verbose=0)
-
-        # testing with non polluted data
-        loss, acc = model.evaluate(self.X_test, self.y_test, verbose=0)
         
-        pred = np.argmax(model.predict(self.X_test), axis=-1)
-
-        
-        return float(loss), float(acc), pred
 
     def weighted_evaluate(self, weighted_loss):
 
@@ -241,43 +184,18 @@ class Evaluater(object):
                     loss=weighted_loss,
                     metrics=['accuracy'])
 
-        model.fit(self.X_train, self.polluted_labels, batch_size=1, epochs=self.training_epochs, verbose=0)
+        sensitive_and_labels = np.hstack([self.X_train[:,-2:],self.polluted_labels])
+        model.fit(self.X_train, sensitive_and_labels, epochs=self.training_epochs, verbose=0)
 
         # testing with non polluted data
-        loss, acc = model.evaluate(self.X_test, self.y_test, batch_size=1, verbose=0)
+        loss, acc = model.evaluate(self.X_test, self.y_test, verbose=0)
         pred = np.argmax(model.predict(self.X_test), axis=-1)
-
+        #pred = model.predict_classes(self.X_test)
         
         return float(loss), float(acc), pred
 
 
-    def alternating_evaluate(self, male_loss, female_loss):
-
-        # initializing model
-        model = create_model()
-
-        for _ in range(self.training_epochs): 
-            # specifying optmizer, loss and metrics
-            model.compile(optimizer='adam', 
-                        loss=female_loss,
-                        metrics=['accuracy'])
-
-            model.fit(self.X_train_female, self.polluted_female_labels, epochs=1, verbose=0)
-
-            # specifying optmizer, loss and metrics
-            model.compile(optimizer='adam', 
-                        loss=male_loss,
-                        metrics=['accuracy'])
-
-            model.fit(self.X_train_male, self.polluted_male_labels, epochs=1, verbose=0)
-
-        loss, acc = model.evaluate(self.X_test, self.y_test, verbose=0)
-        pred = np.argmax(model.predict(self.X_test), axis=-1)
-
-        # testing with non polluted data
-        return float(loss), float(acc), pred
-
-    def baseline(self):
+    def baseline_evaluate(self):
 
         # initializing model
         model = create_model()
@@ -287,11 +205,12 @@ class Evaluater(object):
                     loss=categorical_crossentropy,
                     metrics=['accuracy'])
 
-        model.fit(self.X_train, self.polluted_labels, batch_size=1, epochs=self.training_epochs, verbose=0)
+        model.fit(self.X_train, self.polluted_labels, epochs=self.training_epochs, verbose=0)
 
         # testing with non polluted data
-        loss, acc = model.evaluate(self.X_test, self.y_test, batch_size=1, verbose=0)
+        loss, acc = model.evaluate(self.X_test, self.y_test, verbose=0)
         pred = np.argmax(model.predict(self.X_test), axis=-1)
+        #pred = model.predict_classes(self.X_test)
 
         
         return float(loss), float(acc), pred
@@ -308,37 +227,35 @@ def load_data():
     test = pd.read_csv("income/adult.test")
     # encoding data
 
-    categorical_features = [1,3,5,6,7,8,9,13]
+    categorical_features = [1,3,5,6,7,8,13]
     numerical_features = [0,2,4,10,11,12]
-    target_class = [9,14]
+    sensitive_class = [9]
+    target_class = [14]
 
     ct = ColumnTransformer([
         ("categorical_onehot", OneHotEncoder(handle_unknown='ignore'), categorical_features),
         ("numerical", MinMaxScaler(), numerical_features),
-        ("categorical_onehot_target", OneHotEncoder(handle_unknown='ignore'), target_class)
+        ("sensitive_onehot_target", OneHotEncoder(handle_unknown='ignore'), sensitive_class),
+        ("categorical_target", OneHotEncoder(handle_unknown='ignore'), target_class),
         ])
 
     ct.fit(train)
+    #pprint(train.sex)
+    #pprint(train)
     parsed_test = ct.transform(test)
 
     # X_test, y_test splitting
-    X_test = parsed_test[:,:-4].todense()
-    y_test = parsed_test[:,-4:].todense()
+    X_test = parsed_test[:,:-2].todense()
+    y_test = parsed_test[:,-2:].todense()
 
-    # indentifying males and females
-    train_male = train[train.sex == "Male"]
-    train_female = train[train.sex == "Female"]
+    parsed_train = ct.transform(train).todense()
 
-    parsed_train_male = ct.transform(train_male)
-    parsed_train_female = ct.transform(train_female)
+    X_train = parsed_train[:,:-2]
+    y_train = parsed_train[:,-2:]
 
-    X_train_male = parsed_train_male[:,:-4].todense()
-    y_train_male = parsed_train_male[:,-4:].todense()
-
-    X_train_female = parsed_train_female[:,:-4].todense()
-    y_train_female = parsed_train_female[:,-4:].todense()
-
-    return X_train_male, y_train_male, X_train_female, y_train_female, X_test, y_test
+    pprint(X_train)
+    pprint(X_train)
+    return X_train, y_train, X_test, y_test
 
 #%% main
 def main():
@@ -357,49 +274,32 @@ def main():
         elif o in ("-d", "--directory"):
             directory = a
         else:
-            assert False, "unhaldled option"
-        
-    # configuring log
-    
+            assert False, "unhandled option"
 
     # loading data
-    X_train_male, y_train_male, X_train_female, y_train_female, X_test, y_test = load_data()
+    X_train, y_train, X_test, y_test = load_data()
 
     # creating sqlite database
     
     log_path = os.path.join(directory, "nohup.out")
     logging.basicConfig(filename=log_path,level=logging.DEBUG)
     
-    db_path = os.path.join(directory, "baseline.db")
-    conn = persistence.create_connection(db_path)
-
     # create sqlite tables
     db_path = os.path.join(directory, "baseline.db")
     conn = persistence.create_connection(db_path)
     with conn:
         persistence.create_nnar_table(conn, "result")
-    
-    """
-    db_path = os.path.join(directory, "two_step_forward.db")
-    conn = persistence.create_connection(db_path)
-    with conn:
-        persistence.create_nnar_table(conn, "result")
-    
-    db_path = os.path.join(directory, "alternating_forward.db")
-    conn = persistence.create_connection(db_path)
-    with conn:
-        persistence.create_nnar_table(conn, "result")
-    """
+
 
     db_path = os.path.join(directory, "weighted_forward.db")
     conn = persistence.create_connection(db_path)
     with conn:
         persistence.create_nnar_table(conn, "result")
         
-    fps_male = [0, 0.1, 0.2, 0.3, 0.4, 0.5]
-    fns_male = [0, 0.1, 0.2, 0.3, 0.4, 0.5]
-    fps_female = [0, 0.1, 0.2, 0.3, 0.4, 0.5]
-    fns_female = [0, 0.1, 0.2, 0.3, 0.4, 0.5]
+    fps_male = [0, 0.1, 0.2, 0.3, 0.4]
+    fns_male = [0, 0.1, 0.2, 0.3, 0.4]
+    fps_female = [0, 0.1, 0.2, 0.3, 0.4]
+    fns_female = [0, 0.1, 0.2, 0.3, 0.4]
 
     error_rates = []
     for fp_male in fps_male:
@@ -414,8 +314,7 @@ def main():
     with parallel_backend('multiprocessing'):
         for chunck in chunks(error_rates, n_jobs):    
             results = Parallel(n_jobs=n_jobs)(delayed(worker)(directory,\
-                                X_train_male, y_train_male,\
-                                X_train_female, y_train_female,\
+                                X_train, y_train,\
                                 X_test, y_test,\
                                 fp_male, fn_male, fp_female, fn_female, epochs)\
                                     for fp_male, fn_male, fp_female, fn_female in chunck)
