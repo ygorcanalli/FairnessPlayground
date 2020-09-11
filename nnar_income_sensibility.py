@@ -96,11 +96,11 @@ def pollute(sensitive, data, T_male, T_female):
     return polluted_data
 
 def worker(db_path,\
-            X_train, y_train,\
+            X_train, y_train, polluted_labels,\
             X_test, y_test,\
             fp_male, fn_male, fp_female, fn_female, epochs):
     evaluater = Evaluater(db_path,\
-                            X_train, y_train,\
+                            X_train, y_train, polluted_labels,\
                             X_test, y_test,\
                             fp_male, fn_male, fp_female, fn_female, epochs)
     del evaluater
