@@ -110,7 +110,7 @@ def worker(db_path,\
 
 class Evaluater(object):
 
-    def __init__(self, directory, X_train, y_train, polluted_labels\
+    def __init__(self, directory, X_train, y_train, polluted_labels,\
                             X_test, y_test,\
                             fp_male, fn_male, fp_female, fn_female,\
                             training_epochs):
@@ -324,7 +324,7 @@ def main():
     with parallel_backend('multiprocessing'):
         for chunck in chunks(error_rates, n_jobs):    
             results = Parallel(n_jobs=n_jobs)(delayed(worker)(directory,\
-                                X_train, y_train, y_train_polluted\
+                                X_train, y_train, y_train_polluted,\
                                 X_test, y_test,\
                                 fp_male, fn_male, fp_female, fn_female, epochs)\
                                     for fp_male, fn_male, fp_female, fn_female in chunck)
