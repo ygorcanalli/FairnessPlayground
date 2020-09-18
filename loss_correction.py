@@ -3,11 +3,21 @@ import tensorflow.keras as keras
 import tensorflow.keras.backend as K
 from tensorflow.keras.backend import dot, transpose, categorical_crossentropy, stack, shape
 import numpy as np
+import abc
 
-class ForwardCorrectedModel(tf.keras.Model):
-
+class FairCorrectedModel(tf.keras.Model, metaclass=abc.ABCMeta):
+    @classmethod
+    def __subclasshook__(cls, subclass):
+        return (hasattr(subclass, 'correct_loss') and 
+                callable(subclass.correct_loss) and 
+                NotImplemented)
+    @abc.abstractmethod
+    def correct_loss(self, base_loss):
+        """create a corrected version of base_loss"""
+        raise NotImplementedError
+    
     def __init__(self, model, transition_matrixes):
-        super(ForwardCorrectedModel, self).__init__()
+        super(FairCorrectedModel, self).__init__()
         self.__model = model
         self.transition_matrixes = transition_matrixes
 
@@ -23,10 +33,13 @@ class ForwardCorrectedModel(tf.keras.Model):
         return self.__model.fit(X, y, **kwargs)
 
     def compile(self, **kwargs):
-        kwargs['loss'] = self.forward_loss(kwargs['loss'])
+        kwargs['loss'] = self.correct_loss(kwargs['loss'])
         return self.__model.compile(**kwargs)
 
-    def forward_loss(self, base_loss):
+
+class ForwardCorrectedModel(FairCorrectedModel):
+
+    def correct_loss(self, base_loss):
 
         # Create a loss function that adds the MSE loss to the mean of all squared activations of a specific layer
         def loss(y_true,y_pred):
