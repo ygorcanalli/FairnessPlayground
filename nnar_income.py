@@ -21,6 +21,8 @@ from tensorflow import keras
 import tensorflow.keras.backend as K
 from tensorflow.keras.backend import dot, transpose, categorical_crossentropy, stack
 
+from loss_correction import ForwardCorrectedModel
+
 #%% seeding random
 np.random.seed(77)
 tf.random.set_seed(77)
@@ -42,35 +44,6 @@ def create_model():
     ])
 
     return model
-
-def weighted_categorical_crossentropy(T_male, T_female):
-
-    # Create a loss function that adds the MSE loss to the mean of all squared activations of a specific layer
-    def loss(y_true,y_pred):
-        T = K.stack([T_female.T, T_male.T])
-        y_sensitive = y_true[:,0:2]
-        y_true_target = y_true[:,-2:]
-        T_volume = tf.tensordot(y_sensitive, T, axes=1)
-       
-        y_pred_target_corrected = K.batch_dot(T_volume, y_pred)
-        #y_pred_corrected = K.concatenate([y_pred_sensitive,y_pred_target_corrected],axis=1)
-        
-        return categorical_crossentropy(y_true_target, y_pred_target_corrected)
-   
-    # Return a function
-    return loss
-
-def forward_categorical_crossentropy(T):
-
-    # Create a loss function that adds the MSE loss to the mean of all squared activations of a specific layer
-    def loss(y_true,y_pred):
-        pred = transpose(dot(transpose(T), transpose(y_pred)))
-        return categorical_crossentropy(y_true, pred)
-   
-    # Return a function
-    return loss
-
-
 
 #%% pollute
 def pollute(sensitive, data, T_male, T_female):
@@ -134,16 +107,9 @@ class Evaluater(object):
 
         self.T_female = np.array([[1-fp_female, fp_female],
                             [ fn_female , 1-fn_female]]).astype(np.float32)
-        """
-        self.T_male = np.array([[1 , 0],
-                                [0 , 1]]).astype(np.float32)
 
-        self.T_female = np.array([[1 , 0],
-                                  [0 , 1]]).astype(np.float32)
-        """
         self.polluted_labels = pollute(self.X_train[:,-2:], self.y_train, self.T_male, self.T_female)
 
-        weighted_loss = weighted_categorical_crossentropy(self.T_male, self.T_female)
         
         # testing without correction
         test_loss, test_acc, test_pred = self.baseline_evaluate()
@@ -152,9 +118,9 @@ class Evaluater(object):
 
         # polluted data with alternating forward
         
-        test_loss, test_acc, test_pred = self.weighted_evaluate(weighted_loss)
-        self.weighted_forward_result = [test_loss, test_acc]
-        self.weighted_forward_pred = test_pred
+        test_loss, test_acc, test_pred = self.forward_evaluate()
+        self.forward_result = [test_loss, test_acc]
+        self.forward_pred = test_pred
         #logging.info("[%.1f,%.1f,%.1f,%.1f] Alternating forward: %f" % (self.fp_male, self.fn_male, self.fp_female, self.fn_female, test_acc) )
         
         self.persist_results()
@@ -168,29 +134,28 @@ class Evaluater(object):
         with conn:
             persistence.persist_nnar(conn, "result", self.error_rates + self.baseline_result, self.baseline_pred)
         
-        db_path = os.path.join(self.directory, "weighted_forward.db")
+        db_path = os.path.join(self.directory, "forward.db")
         conn = persistence.create_connection(db_path)
         with conn:
-            persistence.persist_nnar(conn, "result", self.error_rates + self.weighted_forward_result, self.weighted_forward_pred)
+            persistence.persist_nnar(conn, "result", self.error_rates + self.forward_result, self.forward_pred)
         
 
-    def weighted_evaluate(self, weighted_loss):
+    def forward_evaluate(self):
 
         # initializing model
-        model = create_model()
-
+        model = ForwardCorrectedModel(create_model(), [self.T_female, self.T_male])
+        
         # specifying optmizer, loss and metrics
         model.compile(optimizer='adam', 
-                    loss=weighted_loss,
+                    loss=categorical_crossentropy,
                     metrics=['accuracy'])
 
-        sensitive_and_labels = np.hstack([self.X_train[:,-2:],self.polluted_labels])
-        model.fit(self.X_train, sensitive_and_labels, epochs=self.training_epochs, verbose=0)
+        sensitive = self.X_train[:,-2:]
+        model.fit(self.X_train, self.polluted_labels, sensitive, epochs=self.training_epochs, verbose=0)
 
         # testing with non polluted data
         loss, acc = model.evaluate(self.X_test, self.y_test, verbose=0)
         pred = np.argmax(model.predict(self.X_test), axis=-1)
-        #pred = model.predict_classes(self.X_test)
         
         return float(loss), float(acc), pred
 
@@ -210,7 +175,7 @@ class Evaluater(object):
         # testing with non polluted data
         loss, acc = model.evaluate(self.X_test, self.y_test, verbose=0)
         pred = np.argmax(model.predict(self.X_test), axis=-1)
-        #pred = model.predict_classes(self.X_test)
+
 
         
         return float(loss), float(acc), pred
@@ -291,15 +256,15 @@ def main():
         persistence.create_nnar_table(conn, "result")
 
 
-    db_path = os.path.join(directory, "weighted_forward.db")
+    db_path = os.path.join(directory, "forward.db")
     conn = persistence.create_connection(db_path)
     with conn:
         persistence.create_nnar_table(conn, "result")
         
-    fps_male = [0, 0.1, 0.2, 0.3, 0.4]
-    fns_male = [0, 0.1, 0.2, 0.3, 0.4]
-    fps_female = [0, 0.1, 0.2, 0.3, 0.4]
-    fns_female = [0, 0.1, 0.2, 0.3, 0.4]
+    fps_male = [0, 0.1, 0.2]
+    fns_male = [0, 0.1, 0.2]
+    fps_female = [0, 0.1, 0.2]
+    fns_female = [0, 0.1, 0.2]
 
     error_rates = []
     for fp_male in fps_male:
