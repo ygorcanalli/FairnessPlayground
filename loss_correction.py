@@ -2,6 +2,7 @@ import tensorflow as tf
 import tensorflow.keras as keras
 import tensorflow.keras.backend as K
 from tensorflow.keras.backend import dot, transpose, categorical_crossentropy, stack, shape
+import numpy as np
 
 class ForwardCorrectedModel(tf.keras.Model):
 
