@@ -8,18 +8,18 @@ import abc
 class FairCorrectedModel(tf.keras.Model, metaclass=abc.ABCMeta):
     @classmethod
     def __subclasshook__(cls, subclass):
-        return (hasattr(subclass, 'correct_loss') and 
-                callable(subclass.correct_loss) and 
+        return (hasattr(subclass, 'correction_method') and 
+                callable(subclass.correction_method) and 
                 NotImplemented)
+
     @abc.abstractmethod
-    def correct_loss(self, base_loss):
+    def correction_method(self, y_true, y_pred, y_sensitive):
         """create a corrected version of base_loss"""
         raise NotImplementedError
     
-    def __init__(self, model, transition_matrixes):
+    def __init__(self, model):
         super(FairCorrectedModel, self).__init__()
         self.__model = model
-        self.transition_matrixes = transition_matrixes
 
     def call(self, inputs):
         return self.__model.call(inputs)
@@ -35,22 +35,24 @@ class FairCorrectedModel(tf.keras.Model, metaclass=abc.ABCMeta):
     def compile(self, **kwargs):
         kwargs['loss'] = self.correct_loss(kwargs['loss'])
         return self.__model.compile(**kwargs)
+    
+    def correct_loss(self, base_loss):
+        def loss(y_true,y_pred):
+            y_sensitive = y_true[:,0:self.sensitive_size]
+            y_true_target = y_true[:,-self.sensitive_size:]
+            y_pred_corrected = self.correction_method(y_true_target, y_pred, y_sensitive)  
+            return base_loss(y_true_target, y_pred_corrected)
+        return loss
 
 
 class ForwardCorrectedModel(FairCorrectedModel):
 
-    def correct_loss(self, base_loss):
+    def __init__(self, model, transition_matrixes):
+        super(ForwardCorrectedModel, self).__init__(model)
+        self.transition_matrixes = transition_matrixes
 
-        # Create a loss function that adds the MSE loss to the mean of all squared activations of a specific layer
-        def loss(y_true,y_pred):
-            T = K.stack([ transition_matrix.T for transition_matrix in self.transition_matrixes])
-            y_sensitive = y_true[:,0:self.sensitive_size]
-            y_true_target = y_true[:,-self.sensitive_size:]
-            T_volume = tf.tensordot(y_sensitive, T, axes=1)
-        
-            y_pred_target_corrected = K.batch_dot(T_volume, y_pred)
-            
-            return base_loss(y_true_target, y_pred_target_corrected)
-    
-        # Return a function
-        return loss
+    def correction_method(self, y_true, y_pred, y_sensitive):
+        T = K.stack([ transition_matrix.T for transition_matrix in self.transition_matrixes])
+        T_volume = tf.tensordot(y_sensitive, T, axes=1)
+        y_pred_corrected = K.batch_dot(T_volume, y_pred)
+        return y_pred_corrected        
